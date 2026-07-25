@@ -1,0 +1,10 @@
+{
+  "app": { "title": "monitor.ai", "tagline": "AI Global Intelligence Stream" },
+  "nav": { "live": "Live Feed", "briefing": "Daily Brief", "sources": "Sources", "about": "About" },
+  "signal": { "new": "New", "sourcesCount": "sources", "readMore": "Read more" },
+  "filter": { "all": "All Intel", "models": "Model Arms", "products": "Deployment", "industry": "Landscape", "papers": "Frontier", "tips": "Engineering" },
+  "lang": { "switch": "中" },
+  "loading": "Loading...",
+  "error": "Failed to load. Retry.",
+  "noSignals": "No signals yet"
+}

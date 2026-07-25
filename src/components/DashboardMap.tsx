@@ -1,0 +1,499 @@
+'use client'
+
+import { useEffect, useState, useMemo, useRef } from 'react'
+import { type Locale } from '@/lib/i18n'
+import type { Signal } from '@/types/signal'
+import { AI_HUBS, type AiLocation } from '@/data/ai-locations'
+import PanelBase from './PanelBase'
+
+interface Props { locale: Locale; signals?: Signal[] }
+
+const AUX_HUBS: AiLocation[] = [
+  { id: 'google-sf', name: 'Google AI', nameZh: '谷歌AI', lat: 37.789, lng: -122.390, type: 'company', country: 'US', city: 'San Francisco', cityZh: '旧金山', importance: 4, models: [] },
+  { id: 'deepmind-ldn', name: 'DeepMind HQ', nameZh: 'DeepMind总部', lat: 51.5355, lng: -0.1257, type: 'research', country: 'UK', city: 'London', cityZh: '伦敦', importance: 4, models: [] },
+  { id: 'nyu', name: 'NYU', nameZh: '纽约大学', lat: 40.729, lng: -73.996, type: 'research', country: 'US', city: 'New York', cityZh: '纽约', importance: 2, models: [] },
+  { id: 'austin', name: 'Austin AI Hub', nameZh: '奥斯汀AI', lat: 30.267, lng: -97.743, type: 'company', country: 'US', city: 'Austin', cityZh: '奥斯汀', importance: 2, models: [] },
+  { id: 'seattle', name: 'Seattle AI', nameZh: '西雅图AI', lat: 47.608, lng: -122.335, type: 'company', country: 'US', city: 'Seattle', cityZh: '西雅图', importance: 3, models: [] },
+  { id: 'bengaluru', name: 'Bengaluru AI', nameZh: '班加罗尔AI', lat: 12.971, lng: 77.594, type: 'company', country: 'IN', city: 'Bengaluru', cityZh: '班加罗尔', importance: 2, models: [] },
+  { id: 'tokyo-ai', name: 'Tokyo AI', nameZh: '东京AI', lat: 35.676, lng: 139.650, type: 'research', country: 'JP', city: 'Tokyo', cityZh: '东京', importance: 2, models: [] },
+  { id: 'seoul-ai', name: 'Seoul AI', nameZh: '首尔AI', lat: 37.566, lng: 126.978, type: 'company', country: 'KR', city: 'Seoul', cityZh: '首尔', importance: 2, models: [] },
+  { id: 'singapore', name: 'Singapore AI', nameZh: '新加坡AI', lat: 1.352, lng: 103.819, type: 'company', country: 'SG', city: 'Singapore', cityZh: '新加坡', importance: 2, models: [] },
+  { id: 'telaviv', name: 'Tel Aviv AI', nameZh: '特拉维夫AI', lat: 32.085, lng: 34.781, type: 'company', country: 'IL', city: 'Tel Aviv', cityZh: '特拉维夫', importance: 2, models: [] },
+  { id: 'dubai', name: 'Dubai AI', nameZh: '迪拜AI', lat: 25.204, lng: 55.270, type: 'company', country: 'AE', city: 'Dubai', cityZh: '迪拜', importance: 2, models: [] },
+  { id: 'montreal', name: 'Mila Lab', nameZh: 'Mila实验室', lat: 45.501, lng: -73.567, type: 'research', country: 'CA', city: 'Montreal', cityZh: '蒙特利尔', importance: 3, models: [] },
+  { id: 'zurich', name: 'ETH AI Center', nameZh: 'ETH AI中心', lat: 47.376, lng: 8.541, type: 'research', country: 'CH', city: 'Zurich', cityZh: '苏黎世', importance: 2, models: [] },
+  { id: 'amsterdam', name: 'Amsterdam AI', nameZh: '阿姆斯特丹AI', lat: 52.367, lng: 4.904, type: 'research', country: 'NL', city: 'Amsterdam', cityZh: '阿姆斯特丹', importance: 2, models: [] },
+  { id: 'stockholm', name: 'Stockholm AI', nameZh: '斯德哥尔摩AI', lat: 59.329, lng: 18.068, type: 'research', country: 'SE', city: 'Stockholm', cityZh: '斯德哥尔摩', importance: 2, models: [] },
+  { id: 'mit-csail', name: 'MIT CSAIL', nameZh: 'MIT CSAIL', lat: 42.3601, lng: -71.0942, type: 'research', country: 'US', city: 'Cambridge', cityZh: '剑桥', importance: 3, models: [] },
+  { id: 'stanford-hai', name: 'Stanford HAI', nameZh: '斯坦福HAI', lat: 37.4275, lng: -122.1697, type: 'research', country: 'US', city: 'Stanford', cityZh: '斯坦福', importance: 3, models: [] },
+  { id: 'uc-berkeley', name: 'UC Berkeley BAIR', nameZh: '伯克利BAIR', lat: 37.8719, lng: -122.2585, type: 'research', country: 'US', city: 'Berkeley', cityZh: '伯克利', importance: 3, models: [] },
+  { id: 'chicago', name: 'Chicago AI', nameZh: '芝加哥AI', lat: 41.878, lng: -87.629, type: 'research', country: 'US', city: 'Chicago', cityZh: '芝加哥', importance: 2, models: [] },
+]
+
+const ALL_HUBS: AiLocation[] = [...AI_HUBS, ...AUX_HUBS]
+
+const CONNECTIONS = [
+  { from: 'openai', to: 'deepseek', type: 'compete', labelEn: 'Competition', labelZh: '竞争' },
+  { from: 'google-dm', to: 'tsinghua-air', type: 'collab', labelEn: 'Research', labelZh: '研究合作' },
+  { from: 'openai', to: 'anthropic', type: 'compete', labelEn: 'Competition', labelZh: '竞争' },
+  { from: 'microsoft-ai', to: 'nvidia', type: 'partner', labelEn: 'Partnership', labelZh: '合作伙伴' },
+  { from: 'google-dm', to: 'nvidia', type: 'partner', labelEn: 'Partnership', labelZh: '合作伙伴' },
+  { from: 'baidu', to: 'alibaba-damo', type: 'compete', labelEn: 'Competition', labelZh: '竞争' },
+  { from: 'zhipu', to: 'tsinghua-air', type: 'collab', labelEn: 'Research', labelZh: '研究合作' },
+  { from: 'deepseek', to: 'alibaba-damo', type: 'compete', labelEn: 'Competition', labelZh: '竞争' },
+  { from: 'mistral', to: 'huggingface', type: 'collab', labelEn: 'Ecosystem', labelZh: '生态合作' },
+  { from: 'openai', to: 'microsoft-ai', type: 'partner', labelEn: 'Partnership', labelZh: '合作伙伴' },
+  { from: 'meta-ai', to: 'stability', type: 'collab', labelEn: 'Open Source', labelZh: '开源协作' },
+  { from: 'nvidia', to: 'sense-time', type: 'partner', labelEn: 'Chip Supply', labelZh: '芯片供应' },
+  { from: 'google-dm', to: 'deepmind-ldn', type: 'partner', labelEn: 'Internal', labelZh: '内部研发' },
+  { from: 'moonshot', to: 'minimax', type: 'compete', labelEn: 'Competition', labelZh: '竞争' },
+  { from: 'anthropic', to: 'cohere', type: 'compete', labelEn: 'Competition', labelZh: '竞争' },
+  { from: 'openai', to: 'meta-ai', type: 'compete', labelEn: 'Competition', labelZh: '竞争' },
+  { from: 'bytedance', to: 'tencent', type: 'compete', labelEn: 'Competition', labelZh: '竞争' },
+  { from: 'alibaba-damo', to: 'tencent', type: 'compete', labelEn: 'Competition', labelZh: '竞争' },
+  { from: 'mistral', to: 'google-dm', type: 'collab', labelEn: 'Research', labelZh: '研究合作' },
+  { from: 'tsinghua-air', to: 'mit-csail', type: 'collab', labelEn: 'Academic', labelZh: '学术交流' },
+  { from: 'openai', to: 'google-dm', type: 'compete', labelEn: 'Competition', labelZh: '竞争' },
+  { from: 'moonshot', to: 'deepseek', type: 'compete', labelEn: 'Competition', labelZh: '竞争' },
+  { from: 'zhipu', to: 'moonshot', type: 'compete', labelEn: 'Competition', labelZh: '竞争' },
+  { from: 'nvidia', to: 'openai', type: 'partner', labelEn: 'Chip Supply', labelZh: '芯片供应' },
+  { from: 'nvidia', to: 'google-dm', type: 'partner', labelEn: 'Chip Supply', labelZh: '芯片供应' },
+  { from: 'nvidia', to: 'tsmc', type: 'partner', labelEn: 'Manufacturing', labelZh: '代工制造' },
+  { from: 'amd', to: 'tsmc', type: 'partner', labelEn: 'Manufacturing', labelZh: '代工制造' },
+  { from: 'intel', to: 'tsmc', type: 'partner', labelEn: 'Manufacturing', labelZh: '代工制造' },
+  { from: 'qualcomm', to: 'tsmc', type: 'partner', labelEn: 'Manufacturing', labelZh: '代工制造' },
+  { from: 'nvidia', to: 'sk-hynix', type: 'partner', labelEn: 'HBM Supply', labelZh: 'HBM供应' },
+  { from: 'nvidia', to: 'micron', type: 'partner', labelEn: 'Memory Supply', labelZh: '内存供应' },
+  { from: 'samsung', to: 'nvidia', type: 'partner', labelEn: 'Memory Supply', labelZh: '内存供应' },
+  { from: 'asml', to: 'tsmc', type: 'partner', labelEn: 'Equipment', labelZh: '设备供应' },
+  { from: 'asml', to: 'samsung', type: 'partner', labelEn: 'Equipment', labelZh: '设备供应' },
+  { from: 'asml', to: 'intel', type: 'partner', labelEn: 'Equipment', labelZh: '设备供应' },
+  { from: 'hisilicon', to: 'smic', type: 'partner', labelEn: 'Manufacturing', labelZh: '代工制造' },
+  { from: 'cambricon', to: 'smic', type: 'partner', labelEn: 'Manufacturing', labelZh: '代工制造' },
+  { from: 'amd', to: 'intel', type: 'compete', labelEn: 'Competition', labelZh: '竞争' },
+  { from: 'nvidia', to: 'amd', type: 'compete', labelEn: 'Competition', labelZh: '竞争' },
+  { from: 'tsmc', to: 'samsung', type: 'compete', labelEn: 'Process Race', labelZh: '制程竞赛' },
+  { from: 'samsung', to: 'sk-hynix', type: 'compete', labelEn: 'Memory Race', labelZh: '内存竞争' },
+  { from: 'cxmt', to: 'samsung', type: 'compete', labelEn: 'DRAM Race', labelZh: 'DRAM竞争' },
+  { from: 'ymtc', to: 'micron', type: 'compete', labelEn: 'NAND Race', labelZh: 'NAND竞争' },
+  { from: 'nvidia', to: 'hisilicon', type: 'compete', labelEn: 'AI Chip Race', labelZh: 'AI芯片竞争' },
+  { from: 'intel', to: 'amd', type: 'compete', labelEn: 'CPU Race', labelZh: 'CPU竞争' },
+]
+
+function getHubById(id: string): AiLocation | undefined {
+  return ALL_HUBS.find(h => h.id === id)
+}
+
+const CITY_MAP: Record<string, [number, number]> = {
+  'san francisco': [37.7749, -122.4194], 'sf': [37.7749, -122.4194],
+  'mountain view': [37.4221, -122.0841], 'menlo park': [37.4848, -122.1482],
+  'palo alto': [37.4419, -122.1430], 'seattle': [47.6062, -122.3321],
+  'redmond': [47.6409, -122.1292], 'new york': [40.7128, -74.0060], 'nyc': [40.7128, -74.0060],
+  'boston': [42.3601, -71.0589], 'cambridge': [42.3736, -71.1097],
+  'los angeles': [34.0522, -118.2437], 'beijing': [39.9042, 116.4074],
+  'shanghai': [31.2304, 121.4737], 'hangzhou': [30.2741, 120.1551],
+  'shenzhen': [22.5431, 114.0579], 'guangzhou': [23.1291, 113.2644],
+  'tokyo': [35.6762, 139.6503], 'seoul': [37.5665, 126.9780],
+  'london': [51.5074, -0.1278], 'paris': [48.8566, 2.3522],
+  'berlin': [52.5200, 13.4050], 'toronto': [43.6532, -79.3832],
+  'montreal': [45.5017, -73.5673], 'singapore': [1.3521, 103.8198],
+  'tel aviv': [32.0853, 34.7818], 'dubai': [25.2048, 55.2708],
+  'bangalore': [12.9716, 77.5946], 'bengaluru': [12.9716, 77.5946],
+  'zurich': [47.3769, 8.5417], 'amsterdam': [52.3676, 4.9041],
+  'stockholm': [59.3293, 18.0686], 'sydney': [-33.8688, 151.2093],
+  'taipei': [25.0330, 121.5654], 'hong kong': [22.3193, 114.1694],
+  'moscow': [55.7558, 37.6173], 'austin': [30.2672, -97.7431],
+  'chicago': [41.8781, -87.6298],
+  'mumbai': [19.0760, 72.8777], 'delhi': [28.6139, 77.2090],
+  'sao paulo': [-23.5505, -46.6333], 'nairobi': [-1.2921, 36.8219],
+  'hsinchu': [24.808, 120.996], 'suwon': [37.263, 127.028],
+  'icheon': [37.272, 127.442], 'veldhoven': [51.409, 5.396],
+  'hefei': [31.860, 117.280], 'wuhan': [30.520, 114.420],
+  'santa clara': [37.354, -121.955], 'san diego': [32.896, -117.193],
+  'san jose': [37.339, -121.894], 'boise': [43.603, -116.219],
+}
+
+const ENTITY_MAP: Record<string, [number, number]> = {
+  'openai': [37.7749, -122.4194], 'anthropic': [37.7935, -122.3929],
+  'google': [37.4221, -122.0841], 'deepmind': [51.5355, -0.1257],
+  'meta': [37.4848, -122.1482], 'microsoft': [47.6409, -122.1292],
+  'nvidia': [37.3709, -121.9688], 'deepseek': [30.2741, 120.1551],
+  'zhipu': [39.9042, 116.4074], 'kimi': [39.958, 116.452],
+  'minimax': [31.2304, 121.4737], 'alibaba': [30.251, 120.138],
+  'baidu': [40.016, 116.305], 'bytedance': [39.956, 116.330],
+  'tencent': [22.5431, 114.0579], 'claude': [37.7935, -122.3929],
+  'gpt': [37.7749, -122.4194], 'chatgpt': [37.7749, -122.4194],
+  'llama': [37.4848, -122.1482], 'gemini': [37.4221, -122.0841],
+  'copilot': [47.6409, -122.1292], 'amazon': [47.6189, -122.3430],
+  'apple': [37.3349, -122.0090], 'xai': [37.779, -122.417],
+  'midjourney': [37.773, -122.417], 'runway': [40.7580, -73.9855],
+  'stability': [51.5074, -0.1278], 'hugging': [48.8588, 2.350],
+  'perplexity': [37.793, -122.407], 'cohere': [43.6532, -79.3832],
+  'databricks': [37.805, -122.408], 'cerebras': [37.342, -121.883],
+  'sambanova': [37.405, -122.115], 'together': [37.807, -122.271],
+  'eleuther': [40.7286, -73.9923], 'berkeley': [37.8719, -122.2585],
+  'mit': [42.3601, -71.0942], 'stanford': [37.4275, -122.1697],
+  'tsinghua': [40.002, 116.329], 'oxford': [51.7548, -1.2544],
+  'kuaishou': [39.983, 116.305], 'xiaomi': [39.984, 116.317],
+  '01.ai': [39.981, 116.313],
+  'amd': [37.367, -121.968], 'intel': [37.387, -121.963],
+  'qualcomm': [32.896, -117.193], 'broadcom': [37.322, -121.898],
+  'micron': [43.603, -116.219], 'tsmc': [24.808, 120.996],
+  'samsung': [37.263, 127.028], 'sk hynix': [37.272, 127.442],
+  'asml': [51.409, 5.396], 'cambricon': [39.985, 116.320],
+  'hygon': [39.989, 116.315], 'hisilicon': [22.550, 114.060],
+  'smic': [31.240, 121.625], 'cxmt': [31.860, 117.280],
+  'ymtc': [30.520, 114.420],
+}
+
+function extractSignalLocations(signals?: Signal[]): Array<{ lat: number; lng: number; title: string; source: string; id: string }> {
+  if (!signals) return []
+  const locs: Array<{ lat: number; lng: number; title: string; source: string; id: string }> = []
+  const seen = new Set<string>()
+
+  for (const signal of signals) {
+    if (seen.has(signal.id)) continue
+    const text = `${signal.title} ${signal.summary}`.toLowerCase()
+
+    for (const [entity, coords] of Object.entries(ENTITY_MAP)) {
+      if (text.includes(entity)) {
+        seen.add(signal.id)
+        locs.push({ lat: coords[0] + (Math.random() - 0.5) * 0.1, lng: coords[1] + (Math.random() - 0.5) * 0.1, title: signal.title.slice(0, 60), source: signal.source, id: signal.id })
+        break
+      }
+    }
+    if (seen.has(signal.id)) continue
+
+    for (const [city, coords] of Object.entries(CITY_MAP)) {
+      if (text.includes(city)) {
+        seen.add(signal.id)
+        locs.push({ lat: coords[0] + (Math.random() - 0.5) * 0.2, lng: coords[1] + (Math.random() - 0.5) * 0.2, title: signal.title.slice(0, 60), source: signal.source, id: signal.id })
+        break
+      }
+    }
+  }
+  return locs.slice(0, 25)
+}
+
+const TYPE_LABELS: Record<string, { en: string; zh: string }> = {
+  company: { en: 'Company', zh: '公司' },
+  research: { en: 'Research', zh: '研究机构' },
+  datacenter: { en: 'Data Center', zh: '数据中心' },
+  conference: { en: 'Conference', zh: '会议' },
+  chip: { en: 'Chip/Hardware', zh: '芯片/硬件' },
+}
+
+const CONN_COLORS: Record<string, string> = { compete: '#ff4444', partner: '#06b6d4', collab: '#a78bfa' }
+const CONN_LABELS: Record<string, { en: string; zh: string }> = {
+  compete: { en: 'Competition', zh: '竞争' },
+  partner: { en: 'Partnership', zh: '合作伙伴' },
+  collab: { en: 'Research', zh: '研究合作' },
+}
+const HUB_COLORS: Record<string, string> = { company: '#06b6d4', research: '#a78bfa', datacenter: '#f59e0b', conference: '#34d399', chip: '#06b6d4' }
+
+type MapLayer = 'company' | 'research' | 'chip' | 'signal' | 'connection'
+
+const LAYER_OPTIONS: { key: MapLayer; label: Record<string, string>; color: string }[] = [
+  { key: 'company', label: { en: 'Company', zh: '公司' }, color: '#06b6d4' },
+  { key: 'research', label: { en: 'Research', zh: '研究机构' }, color: '#a78bfa' },
+  { key: 'chip', label: { en: 'Chip/HW', zh: '芯片/硬件' }, color: '#06b6d4' },
+  { key: 'signal', label: { en: 'Signal', zh: '信号' }, color: '#f59e0b' },
+  { key: 'connection', label: { en: 'Connections', zh: '关系连线' }, color: '#ff4444' },
+]
+
+export default function DashboardMap({ locale, signals }: Props) {
+  const [MapComponents, setMapComponents] = useState<{
+    MapContainer: React.ComponentType<any>
+    TileLayer: React.ComponentType<any>
+    CircleMarker: React.ComponentType<any>
+    Polyline: React.ComponentType<any>
+    Marker: React.ComponentType<any>
+    Popup: React.ComponentType<any>
+    Tooltip: React.ComponentType<any>
+  } | null>(null)
+  const [L, setL] = useState<any>(null)
+  const [animatedOffset, setAnimatedOffset] = useState(0)
+  const animRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [activeLayers, setActiveLayers] = useState<MapLayer[]>(['company', 'research', 'chip', 'signal', 'connection'])
+  const [layerOpen, setLayerOpen] = useState(false)
+
+  useEffect(() => {
+    if (!document.querySelector('link[href*="leaflet"]')) {
+      const link = document.createElement('link')
+      link.rel = 'stylesheet'
+      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'
+      link.integrity = 'sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY='
+      link.crossOrigin = ''
+      document.head.appendChild(link)
+    }
+    import('react-leaflet').then(mod => {
+      setMapComponents({
+        MapContainer: mod.MapContainer, TileLayer: mod.TileLayer,
+        CircleMarker: mod.CircleMarker, Polyline: mod.Polyline,
+        Marker: mod.Marker, Popup: mod.Popup, Tooltip: mod.Tooltip,
+      })
+    }).catch(() => {})
+    import('leaflet').then(lib => setL(lib)).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    animRef.current = setInterval(() => {
+      setAnimatedOffset(o => (o + 0.5) % 20)
+    }, 80)
+    return () => { if (animRef.current) clearInterval(animRef.current) }
+  }, [])
+
+  const signalLocations = useMemo(() => extractSignalLocations(signals), [signals])
+  const connectionLines = useMemo(() =>
+    CONNECTIONS.map(c => {
+      const fromHub = getHubById(c.from)
+      const toHub = getHubById(c.to)
+      if (!fromHub || !toHub) return null
+      const label = locale === 'zh' ? c.labelZh : c.labelEn
+      return { from: [fromHub.lat, fromHub.lng] as [number, number], to: [toHub.lat, toHub.lng] as [number, number], type: c.type, label }
+    }).filter(Boolean) as Array<{ from: [number, number]; to: [number, number]; type: string; label: string }>,
+  [locale])
+
+  const getHubConnections = useMemo(() => {
+    const map = new Map<string, Array<{ otherName: string; otherNameZh: string; type: string; otherId: string }>>()
+    for (const c of CONNECTIONS) {
+      const fromHub = getHubById(c.from)
+      const toHub = getHubById(c.to)
+      if (!fromHub || !toHub) continue
+      if (!map.has(c.from)) map.set(c.from, [])
+      if (!map.has(c.to)) map.set(c.to, [])
+      map.get(c.from)!.push({ otherName: toHub.name, otherNameZh: toHub.nameZh, type: c.type, otherId: c.to })
+      map.get(c.to)!.push({ otherName: fromHub.name, otherNameZh: fromHub.nameZh, type: c.type, otherId: c.from })
+    }
+    return map
+  }, [])
+
+  const midMarkers = useMemo(() =>
+    connectionLines.map((conn, i) => {
+      const midLat = (conn.from[0] + conn.to[0]) / 2
+      const midLng = (conn.from[1] + conn.to[1]) / 2
+      return { ...conn, midLat, midLng, index: i }
+    }), [connectionLines])
+
+  const toggleLayer = (layer: MapLayer) => {
+    setActiveLayers(prev => prev.includes(layer) ? prev.filter(l => l !== layer) : [...prev, layer])
+  }
+
+  const isLayerActive = (layer: MapLayer) => activeLayers.includes(layer)
+
+  if (!MapComponents) {
+    return (
+      <PanelBase id="map" title={locale === 'zh' ? '全球 AI 活动地图' : 'Global AI Activity Map'} dataBadge="live" collapsible className="h-full">
+        <div className="h-full min-h-0 flex items-center justify-center">
+          <div className="panel-loading"><div className="panel-loading-radar"><div className="panel-radar-dot" /></div><div className="panel-loading-text">{locale === 'zh' ? '加载地图...' : 'Loading map...'}</div></div>
+        </div>
+      </PanelBase>
+    )
+  }
+
+  const { MapContainer, TileLayer, CircleMarker, Polyline, Marker, Popup, Tooltip } = MapComponents
+
+  const filteredHubs = ALL_HUBS.filter(hub => {
+    if (hub.type === 'company' && isLayerActive('company')) return true
+    if (hub.type === 'research' && isLayerActive('research')) return true
+    if (hub.type === 'chip' && isLayerActive('chip')) return true
+    if (hub.type === 'datacenter' && isLayerActive('chip')) return true
+    if (hub.type === 'conference') return false
+    return false
+  })
+
+  const showConnections = isLayerActive('connection')
+  const showSignals = isLayerActive('signal')
+
+  return (
+    <PanelBase
+      id="map"
+      title={locale === 'zh' ? '全球 AI 活动地图' : 'Global AI Activity Map'}
+      dataBadge="live"
+      collapsible
+      className="h-full"
+      headerExtra={
+        <div className="relative">
+          <button
+            onClick={() => setLayerOpen(!layerOpen)}
+            className="text-[9px] px-2 py-0.5 rounded border border-[#2a2a3e] text-[#8b8ba0] hover:text-[#06b6d4] hover:border-[#06b6d4]/30 transition-colors flex items-center gap-1"
+          >
+            <span>{locale === 'zh' ? '图层' : 'Layers'}</span>
+            <span className="text-[7px]">{layerOpen ? '▲' : '▼'}</span>
+          </button>
+          {layerOpen && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setLayerOpen(false)} />
+              <div className="absolute right-0 top-full mt-1 z-20 bg-[#12121a] border border-[#1e1e2e] rounded-lg p-2 min-w-[130px] shadow-xl">
+                {LAYER_OPTIONS.map(opt => (
+                  <label
+                    key={opt.key}
+                    className="flex items-center gap-2 py-1 px-1 rounded hover:bg-[#16162a] cursor-pointer text-[10px] text-[#8b8ba0]"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isLayerActive(opt.key)}
+                      onChange={() => toggleLayer(opt.key)}
+                      className="w-2.5 h-2.5 rounded accent-[#06b6d4]"
+                    />
+                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: opt.color }} />
+                    {locale === 'zh' ? opt.label.zh : opt.label.en}
+                  </label>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      }
+    >
+      <div className="h-full min-h-0">
+        <MapContainer center={[25, 10]} zoom={2} scrollWheelZoom={true} style={{ height: '100%', width: '100%', background: '#0a0a0f' }} zoomControl={false} attributionControl={false}>
+          <TileLayer attribution='&copy; <a href="https://carto.com/">CARTO</a>' url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
+
+          {/* Dynamic connection lines */}
+          {showConnections && connectionLines.map((conn, i) => {
+            const color = CONN_COLORS[conn.type] || '#555'
+            const positions: [number, number][] = [conn.from, conn.to]
+            const dashOffset = (animatedOffset + i * 3) % 20
+            return (
+              <Polyline
+                key={`conn-${i}`}
+                positions={positions}
+                pathOptions={{ color, weight: 1.2, opacity: 0.45, dashArray: '6 8', dashOffset: dashOffset.toString() }}
+              >
+                <Tooltip direction="center" opacity={0.85}>
+                  <span className="text-[9px]">{conn.label}</span>
+                </Tooltip>
+              </Polyline>
+            )
+          })}
+
+          {/* Connection line labels */}
+          {showConnections && L && midMarkers.map((m, i) => {
+            const color = CONN_COLORS[m.type] || '#555'
+            const icon = L.divIcon({
+              className: '',
+              html: `<div style="font-size:7px;color:${color}99;font-weight:600;white-space:nowrap;text-shadow:0 0 4px rgba(0,0,0,0.9);pointer-events:none">${m.label}</div>`,
+              iconSize: [70, 12],
+              iconAnchor: [35, 6],
+            })
+            return <Marker key={`mid-${i}`} position={[m.midLat, m.midLng]} icon={icon} interactive={false} />
+          })}
+
+          {/* AI Hub markers */}
+          {filteredHubs.map(hub => {
+            const size = hub.importance >= 5 ? 8 : hub.importance >= 4 ? 6 : hub.importance >= 3 ? 4 : 2.5
+            const color = HUB_COLORS[hub.type] || '#06b6d4'
+            const connected = getHubConnections.get(hub.id) || []
+            const nearbySignals = signalLocations.filter(l =>
+              Math.abs(l.lat - hub.lat) < 5 && Math.abs(l.lng - hub.lng) < 5
+            ).length
+            const isZh = locale === 'zh'
+            const displayName = isZh ? hub.nameZh : hub.name
+            const displayCity = isZh ? hub.cityZh : hub.city
+            const typeLabel = (TYPE_LABELS[hub.type] || { en: hub.type, zh: hub.type })
+            const typedisplay = isZh ? typeLabel.zh : typeLabel.en
+
+            const detailHtml = `
+              <div style="font-size:11px;color:#e5e5e5;line-height:1.5;min-width:240px;max-width:320px">
+                <div style="font-weight:600;font-size:14px;margin-bottom:2px">${displayName}</div>
+                <div style="color:#5c5c72;margin-bottom:6px;font-size:10px">${displayCity}, ${hub.country}</div>
+                <div style="display:flex;gap:4px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+                  <span style="font-size:8px;padding:2px 8px;border-radius:3px;background:${color}20;color:${color};border:1px solid ${color}40">${typedisplay}</span>
+                  <span style="font-size:9px;color:#8b8ba0">${isZh ? '重要度' : 'Importance'}: ${'●'.repeat(hub.importance)}${'○'.repeat(5 - hub.importance)}</span>
+                </div>
+                ${hub.description ? `<div style="font-size:10px;color:#8b8ba0;margin-bottom:8px;padding:6px 8px;background:#0c0c14;border-radius:4px">📋 ${hub.description}</div>` : ''}
+                ${hub.models.length > 0 ? `
+                  <div style="margin-top:4px;border-top:1px solid #1e1e2e;padding-top:6px">
+                    <div style="font-size:9px;color:#5c5c72;margin-bottom:4px;font-weight:600">${isZh ? '旗下模型' : 'Models'} (${hub.models.length})</div>
+                    ${hub.models.map((m: any) => `
+                      <div style="font-size:9px;padding:3px 0;border-bottom:1px solid #1e1e2e30">
+                        <div style="display:flex;align-items:center;gap:6px">
+                          <span style="color:#e5e5e5;font-weight:500">${m.name}</span>
+                          <span style="font-size:7px;color:#5c5c72">${m.version}</span>
+                          <span style="font-size:7px;color:#06b6d4;margin-left:auto">${m.releaseYear}</span>
+                        </div>
+                        ${m.description ? `<div style="font-size:7px;color:#5c5c72;margin-top:1px">${m.description}</div>` : ''}
+                      </div>
+                    `).join('')}
+                  </div>
+                ` : ''}
+                ${connected.length > 0 ? `
+                  <div style="margin-top:6px;border-top:1px solid #1e1e2e;padding-top:6px">
+                    <div style="font-size:9px;color:#5c5c72;margin-bottom:3px;font-weight:600">${isZh ? '关系连线' : 'Connections'} (${connected.length})</div>
+                    ${connected.slice(0, 5).map((c: any) => `
+                      <div style="font-size:8px;color:#8b8ba0;display:flex;align-items:center;gap:4px;padding:1px 0">
+                        <span style="width:8px;height:1px;background:${CONN_COLORS[c.type] || '#555'};display:inline-block;flex-shrink:0"></span>
+                        <span>${isZh ? c.otherNameZh : c.otherName}</span>
+                        <span style="color:${CONN_COLORS[c.type] || '#555'}">· ${isZh ? (CONN_LABELS[c.type]?.zh || c.type) : (CONN_LABELS[c.type]?.en || c.type)}</span>
+                      </div>
+                    `).join('')}
+                    ${connected.length > 5 ? `<div style="font-size:8px;color:#5c5c72">...+${connected.length - 5} ${isZh ? '条更多' : 'more'}</div>` : ''}
+                  </div>
+                ` : ''}
+                ${nearbySignals > 0 ? `
+                  <div style="margin-top:4px;font-size:9px;color:#f59e0b;border-top:1px solid #1e1e2e;padding-top:5px">📍 ${nearbySignals} ${isZh ? '条附近信号' : 'nearby signals'}</div>
+                ` : ''}
+              </div>
+            `
+
+            return (
+              <CircleMarker
+                key={hub.id}
+                center={[hub.lat, hub.lng]}
+                radius={size}
+                pathOptions={{ fillColor: color, fillOpacity: 0.75, color: color, weight: 1.5, opacity: 0.5 }}
+              >
+                <Popup>
+                  <div dangerouslySetInnerHTML={{ __html: detailHtml }} />
+                </Popup>
+                <Tooltip direction="top" offset={[0, -size - 5]} opacity={0.9}>
+                  <div style={{ fontSize: '10px' }}>
+                    <div style={{ fontWeight: 600 }}>{displayName}</div>
+                    <div style={{ fontSize: '8px', color: '#8b8ba0' }}>{displayCity} · {typedisplay} · {'●'.repeat(hub.importance)}</div>
+                    {hub.models.length > 0 && (
+                      <div style={{ fontSize: '7px', color: CONN_COLORS.partner }}>
+                        {hub.models.length} model{hub.models.length > 1 ? 's' : ''}: {hub.models[0].name}{hub.models.length > 1 ? '...' : ''}
+                      </div>
+                    )}
+                  </div>
+                </Tooltip>
+              </CircleMarker>
+            )
+          })}
+
+          {/* Signal markers */}
+          {showSignals && signalLocations.map(loc => (
+            <CircleMarker
+              key={loc.id}
+              center={[loc.lat, loc.lng]}
+              radius={5}
+              pathOptions={{ fillColor: '#f59e0b', fillOpacity: 0.55, color: '#f59e0b', weight: 2, opacity: 0.7 }}
+            >
+              <Popup>
+                <div className="text-xs max-w-52" style={{ color: '#e5e5e5', lineHeight: 1.4 }}>
+                  <div>{loc.title}</div>
+                  <div className="text-[#06b6d4] mt-1 text-[9px]">{loc.source}</div>
+                </div>
+              </Popup>
+              <Tooltip direction="top" offset={[0, -7]} opacity={0.85}>
+                <span className="text-[8px]">{loc.title.slice(0, 25)}...</span>
+              </Tooltip>
+            </CircleMarker>
+          ))}
+        </MapContainer>
+      </div>
+
+      <div className="flex items-center gap-3 px-4 py-2 border-t border-[#1e1e2e] text-[9px] text-[#5c5c72] flex-wrap">
+        {isLayerActive('company') && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#06b6d4]" />{locale === 'zh' ? '公司' : 'Company'}</span>}
+        {isLayerActive('chip') && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#06b6d4]" style={{ opacity: 0.6 }} />{locale === 'zh' ? '芯片/硬件' : 'Chip/Hardware'}</span>}
+        {isLayerActive('research') && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#a78bfa]" />{locale === 'zh' ? '研究机构' : 'Research'}</span>}
+        {isLayerActive('signal') && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#f59e0b]" />{locale === 'zh' ? '信号' : 'Signal'}</span>}
+        {isLayerActive('connection') && <><span className="flex items-center gap-1"><span className="w-1.5 h-0 rounded-sm border-t border-dashed border-[#ff4444]/50 w-4" />{locale === 'zh' ? '竞争' : 'Compete'}</span>
+        <span className="flex items-center gap-1"><span className="w-1.5 h-0 rounded-sm border-t border-dashed border-[#06b6d4]/50 w-4" />{locale === 'zh' ? '合作' : 'Partner'}</span>
+        <span className="flex items-center gap-1"><span className="w-1.5 h-0 rounded-sm border-t border-dashed border-[#a78bfa]/50 w-4" />{locale === 'zh' ? '研究' : 'Research'}</span></>}
+        <span className="ml-auto">{filteredHubs.length} {locale === 'zh' ? '个可见据点' : 'visible hubs'}{showConnections ? ` · ${CONNECTIONS.length} ${locale === 'zh' ? '条连线' : 'connections'}` : ''}</span>
+      </div>
+    </PanelBase>
+  )
+}

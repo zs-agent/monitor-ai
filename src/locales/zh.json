@@ -1,0 +1,10 @@
+{
+  "app": { "title": "monitor.ai", "tagline": "全球 AI 情报实时流" },
+  "nav": { "live": "实时信号", "briefing": "每日简报", "sources": "数据源", "about": "关于" },
+  "signal": { "new": "新", "sourcesCount": "个信源", "readMore": "阅读详情" },
+  "filter": { "all": "全部分析", "models": "模型军备", "products": "应用落地", "industry": "产业格局", "papers": "学术前沿", "tips": "工程实战" },
+  "lang": { "switch": "EN" },
+  "loading": "加载中...",
+  "error": "加载失败，请重试",
+  "noSignals": "暂无信号"
+}
