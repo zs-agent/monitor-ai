@@ -3,7 +3,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import SignalCard from '@/components/SignalCard'
 import ComparisonPanel from '@/components/ComparisonPanel'
-import TrendChartPanel from '@/components/TrendChartPanel'
 import AIMarketInsightPanel from '@/components/AIMarketInsightPanel'
 import NewsTimeline from '@/components/NewsTimeline'
 import DashboardMap from '@/components/DashboardMap'
@@ -182,10 +181,9 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Row 3: ComparisonPanel + TrendChart side by side */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
+        {/* Row 3: US vs China AI Comparison (merged with trend chart) */}
+        <div className="mb-3">
           <ComparisonPanel locale={locale} signals={signals} />
-          <TrendChartPanel locale={locale} />
         </div>
 
         {/* Row 4: Vendor Radar + Keyword Monitor */}
