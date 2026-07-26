@@ -145,7 +145,7 @@ export default function PanelBase({
           )}
         </div>
       </div>
-      <div className="panel-content">
+      <div className="panel-content min-h-0">
         {loading ? (
           <div className="panel-loading">
             <div className="panel-loading-radar">

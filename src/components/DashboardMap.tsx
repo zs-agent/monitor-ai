@@ -191,12 +191,13 @@ const CONN_LABELS: Record<string, { en: string; zh: string }> = {
 }
 const HUB_COLORS: Record<string, string> = { company: '#06b6d4', research: '#a78bfa', datacenter: '#f59e0b', conference: '#34d399', chip: '#06b6d4' }
 
-type MapLayer = 'company' | 'research' | 'chip' | 'signal' | 'connection'
+type MapLayer = 'company' | 'research' | 'chip' | 'datacenter' | 'signal' | 'connection'
 
 const LAYER_OPTIONS: { key: MapLayer; label: Record<string, string>; color: string }[] = [
   { key: 'company', label: { en: 'Company', zh: '公司' }, color: '#06b6d4' },
   { key: 'research', label: { en: 'Research', zh: '研究机构' }, color: '#a78bfa' },
   { key: 'chip', label: { en: 'Chip/HW', zh: '芯片/硬件' }, color: '#06b6d4' },
+  { key: 'datacenter', label: { en: 'Data Center', zh: '数据中心' }, color: '#f59e0b' },
   { key: 'signal', label: { en: 'Signal', zh: '信号' }, color: '#f59e0b' },
   { key: 'connection', label: { en: 'Connections', zh: '关系连线' }, color: '#ff4444' },
 ]
@@ -210,6 +211,7 @@ export default function DashboardMap({ locale, signals }: Props) {
     Marker: React.ComponentType<any>
     Popup: React.ComponentType<any>
     Tooltip: React.ComponentType<any>
+    useMap: () => any
   } | null>(null)
   const [L, setL] = useState<any>(null)
   const [animatedOffset, setAnimatedOffset] = useState(0)
@@ -231,9 +233,10 @@ export default function DashboardMap({ locale, signals }: Props) {
         MapContainer: mod.MapContainer, TileLayer: mod.TileLayer,
         CircleMarker: mod.CircleMarker, Polyline: mod.Polyline,
         Marker: mod.Marker, Popup: mod.Popup, Tooltip: mod.Tooltip,
+        useMap: mod.useMap,
       })
-    }).catch(() => {})
-    import('leaflet').then(lib => setL(lib)).catch(() => {})
+    }).catch((err) => { console.error('Failed to load react-leaflet:', err) })
+    import('leaflet').then(lib => setL(lib)).catch((err) => { console.error('Failed to load leaflet:', err) })
   }, [])
 
   useEffect(() => {
@@ -281,6 +284,41 @@ export default function DashboardMap({ locale, signals }: Props) {
 
   const isLayerActive = (layer: MapLayer) => activeLayers.includes(layer)
 
+  // Bounds covering every hub so the default view shows all points
+  const allBounds = useMemo<[number, number][]>(
+    () => ALL_HUBS.map(h => [h.lat, h.lng] as [number, number]),
+    []
+  )
+
+  // Controller: keeps wheel events inside the map and fits all points on mount
+  const MapController = useMemo(() => {
+    if (!MapComponents) return null
+    const useMapHook = MapComponents.useMap
+    return function Controller({ bounds }: { bounds: [number, number][] }) {
+      const map = useMapHook()
+      const fittedRef = useRef(false)
+
+      useEffect(() => {
+        const container = map.getContainer()
+        // Never let the wheel bubble to the page scroller: zoom stays on the map
+        const onWheel = (e: WheelEvent) => {
+          e.preventDefault()
+          e.stopPropagation()
+        }
+        container.addEventListener('wheel', onWheel, { passive: false })
+        return () => container.removeEventListener('wheel', onWheel)
+      }, [map])
+
+      useEffect(() => {
+        if (fittedRef.current || bounds.length < 2) return
+        fittedRef.current = true
+        map.fitBounds(bounds, { padding: [8, 8], animate: false })
+      }, [map, bounds])
+
+      return null
+    }
+  }, [MapComponents])
+
   if (!MapComponents) {
     return (
       <PanelBase id="map" title={locale === 'zh' ? '全球 AI 活动地图' : 'Global AI Activity Map'} dataBadge="live" collapsible className="h-full">
@@ -297,7 +335,7 @@ export default function DashboardMap({ locale, signals }: Props) {
     if (hub.type === 'company' && isLayerActive('company')) return true
     if (hub.type === 'research' && isLayerActive('research')) return true
     if (hub.type === 'chip' && isLayerActive('chip')) return true
-    if (hub.type === 'datacenter' && isLayerActive('chip')) return true
+    if (hub.type === 'datacenter' && isLayerActive('datacenter')) return true
     if (hub.type === 'conference') return false
     return false
   })
@@ -319,7 +357,7 @@ export default function DashboardMap({ locale, signals }: Props) {
             className="text-[9px] px-2 py-0.5 rounded border border-[#2a2a3e] text-[#8b8ba0] hover:text-[#06b6d4] hover:border-[#06b6d4]/30 transition-colors flex items-center gap-1"
           >
             <span>{locale === 'zh' ? '图层' : 'Layers'}</span>
-            <span className="text-[7px]">{layerOpen ? '▲' : '▼'}</span>
+            <span className="text-[9px]">{layerOpen ? '▲' : '▼'}</span>
           </button>
           {layerOpen && (
             <>
@@ -347,7 +385,20 @@ export default function DashboardMap({ locale, signals }: Props) {
       }
     >
       <div className="h-full min-h-0">
-        <MapContainer center={[25, 10]} zoom={2} scrollWheelZoom={true} style={{ height: '100%', width: '100%', background: '#0a0a0f' }} zoomControl={false} attributionControl={false}>
+        <MapContainer
+          center={[25, 10]}
+          zoom={2}
+          minZoom={2}
+          maxZoom={10}
+          scrollWheelZoom={true}
+          maxBounds={[[-85, -180], [85, 180]]}
+          maxBoundsViscosity={1}
+          worldCopyJump={false}
+          style={{ height: '100%', width: '100%', background: '#0a0a0f' }}
+          zoomControl={false}
+          attributionControl={false}
+        >
+          {MapController && <MapController bounds={allBounds} />}
           <TileLayer attribution='&copy; <a href="https://carto.com/">CARTO</a>' url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
 
           {/* Dynamic connection lines */}
@@ -392,14 +443,14 @@ export default function DashboardMap({ locale, signals }: Props) {
             const displayName = isZh ? hub.nameZh : hub.name
             const displayCity = isZh ? hub.cityZh : hub.city
             const typeLabel = (TYPE_LABELS[hub.type] || { en: hub.type, zh: hub.type })
-            const typedisplay = isZh ? typeLabel.zh : typeLabel.en
+            const typeDisplay = isZh ? typeLabel.zh : typeLabel.en
 
             const detailHtml = `
               <div style="font-size:11px;color:#e5e5e5;line-height:1.5;min-width:240px;max-width:320px">
                 <div style="font-weight:600;font-size:14px;margin-bottom:2px">${displayName}</div>
                 <div style="color:#5c5c72;margin-bottom:6px;font-size:10px">${displayCity}, ${hub.country}</div>
                 <div style="display:flex;gap:4px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
-                  <span style="font-size:8px;padding:2px 8px;border-radius:3px;background:${color}20;color:${color};border:1px solid ${color}40">${typedisplay}</span>
+                   <span style="font-size:8px;padding:2px 8px;border-radius:3px;background:${color}20;color:${color};border:1px solid ${color}40">${typeDisplay}</span>
                   <span style="font-size:9px;color:#8b8ba0">${isZh ? '重要度' : 'Importance'}: ${'●'.repeat(hub.importance)}${'○'.repeat(5 - hub.importance)}</span>
                 </div>
                 ${hub.description ? `<div style="font-size:10px;color:#8b8ba0;margin-bottom:8px;padding:6px 8px;background:#0c0c14;border-radius:4px">📋 ${hub.description}</div>` : ''}
@@ -450,7 +501,7 @@ export default function DashboardMap({ locale, signals }: Props) {
                 <Tooltip direction="top" offset={[0, -size - 5]} opacity={0.9}>
                   <div style={{ fontSize: '10px' }}>
                     <div style={{ fontWeight: 600 }}>{displayName}</div>
-                    <div style={{ fontSize: '8px', color: '#8b8ba0' }}>{displayCity} · {typedisplay} · {'●'.repeat(hub.importance)}</div>
+                    <div style={{ fontSize: '8px', color: '#8b8ba0' }}>{displayCity} · {typeDisplay} · {'●'.repeat(hub.importance)}</div>
                     {hub.models.length > 0 && (
                       <div style={{ fontSize: '7px', color: CONN_COLORS.partner }}>
                         {hub.models.length} model{hub.models.length > 1 ? 's' : ''}: {hub.models[0].name}{hub.models.length > 1 ? '...' : ''}
@@ -477,7 +528,7 @@ export default function DashboardMap({ locale, signals }: Props) {
                 </div>
               </Popup>
               <Tooltip direction="top" offset={[0, -7]} opacity={0.85}>
-                <span className="text-[8px]">{loc.title.slice(0, 25)}...</span>
+                <span className="text-[10px]">{loc.title.slice(0, 25)}...</span>
               </Tooltip>
             </CircleMarker>
           ))}

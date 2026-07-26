@@ -11,3 +11,5 @@ export interface Signal {
   sourcesCount: number
   language: 'zh' | 'en'
 }
+
+export type CardSignal = Signal | import('@/lib/clustering').ClusteredSignal

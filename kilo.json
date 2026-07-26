@@ -1,0 +1,32 @@
+{
+  "$schema": "https://app.kilo.ai/config.json",
+  "provider": {
+    "anthropic": {
+      "options": {
+        "apiKey": "sk-ZVENx1zh3FQVAJeTM6xzLCYfzqslykV0ytUTUE8GgEVxe9e5",
+        "baseURL": "https://4sapi.com/v1",
+        "timeout": 300000
+      },
+      "models": {
+        "claude-opus-5": {
+          "name": "Claude Opus 5"
+        }
+      }
+    },
+    "openai": {
+      "options": {
+        "apiKey": "sk-vKiQzp1OssHflMHKBLnmsqxXsJlsOeNaZdJ3ItOWmpCgDsf3",
+        "baseURL": "https://4sapi.com/v1",
+        "timeout": 300000
+      },
+      "models": {
+        "deepseek-pro": {
+          "name": "DeepSeek Pro"
+        },
+        "flash": {
+          "name": "Flash"
+        }
+      }
+    }
+  }
+}

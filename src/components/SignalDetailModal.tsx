@@ -1,21 +1,24 @@
 'use client'
 
 import type { Signal } from '@/types/signal'
+import type { ClusteredSignal } from '@/lib/clustering'
 import { type Locale } from '@/lib/i18n'
 
-function timeAgo(iso: string): string {
+function timeAgo(iso: string, locale: Locale): string {
   const diff = Date.now() - new Date(iso).getTime()
   const m = Math.floor(diff / 60000)
-  if (m < 60) return m + 'm ago'
+  if (m < 60) return locale === 'zh' ? `${m}分钟前` : `${m}m ago`
   const h = Math.floor(m / 60)
-  if (h < 24) return h + 'h ago'
-  return Math.floor(h / 24) + 'd ago'
+  if (h < 24) return locale === 'zh' ? `${h}小时前` : `${h}h ago`
+  return locale === 'zh' ? `${Math.floor(h / 24)}天前` : `${Math.floor(h / 24)}d ago`
 }
 
-export default function SignalDetailModal({ signal, locale, onClose }: { signal: Signal | null; locale: Locale; onClose: () => void }) {
+export default function SignalDetailModal({ signal, locale, onClose }: { signal: Signal | ClusteredSignal | null; locale: Locale; onClose: () => void }) {
   if (!signal) { return null }
 
-  const cats = { models: 'Models', products: 'Products', industry: 'Industry', papers: 'Papers', tips: 'Tips' }
+  const catsZh = { models: '模型', products: '产品', industry: '产业', papers: '论文', tips: '实战' }
+  const catsEn = { models: 'Models', products: 'Products', industry: 'Industry', papers: 'Papers', tips: 'Tips' }
+  const cats = locale === 'zh' ? catsZh : catsEn
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={onClose}>
@@ -42,7 +45,7 @@ export default function SignalDetailModal({ signal, locale, onClose }: { signal:
             </div>
             <div className="bg-[#0c0c14] rounded-lg p-3">
               <div className="text-[#5c5c72] mb-0.5">{locale === 'zh' ? '时间' : 'Time'}</div>
-              <div className="text-[#e5e5e5] font-mono">{timeAgo(signal.publishedAt)}</div>
+               <div className="text-[#e5e5e5] font-mono">{timeAgo(signal.publishedAt, locale)}</div>
             </div>
             <div className="bg-[#0c0c14] rounded-lg p-3">
               <div className="text-[#5c5c72] mb-0.5">{locale === 'zh' ? '分类' : 'Category'}</div>
@@ -56,19 +59,19 @@ export default function SignalDetailModal({ signal, locale, onClose }: { signal:
                 })}
               </div>
             </div>
-            <div className="col-span-2 bg-[#0c0c14] rounded-lg p-3">
-              <div className="text-[#5c5c72] mb-0.5">{locale === 'zh' ? '标签' : 'Tags'}</div>
-              <div className="flex flex-wrap gap-1">
-                {signal.tags.map(function(tag, i) {
-                  return <span key={i} className="px-1.5 py-0.5 text-[9px] rounded bg-[#06b6d4]/10 text-[#06b6d4] border border-[#06b6d4]/20">{tag}</span>
-                })}
-              </div>
-            </div>
+             <div className="col-span-2 bg-[#0c0c14] rounded-lg p-3">
+               <div className="text-[#5c5c72] mb-0.5">{locale === 'zh' ? '标签' : 'Tags'}</div>
+               <div className="flex flex-wrap gap-1">
+                 {('tags' in signal ? signal.tags : []).map(function(tag, i) {
+                   return <span key={i} className="px-1.5 py-0.5 text-[9px] rounded bg-[#06b6d4]/10 text-[#06b6d4] border border-[#06b6d4]/20">{tag}</span>
+                 })}
+               </div>
+             </div>
           </div>
         </div>
 
         <div className="px-5 py-3 border-t border-[#1e1e2e] flex items-center justify-between">
-          <span className="text-[9px] text-[#5c5c72]">{signal.sourcesCount} {locale === 'zh' ? '个信源' : 'sources'}</span>
+          <span className="text-[9px] text-[#5c5c72]">{'sourcesCount' in signal ? signal.sourcesCount : signal.sourceCount} {locale === 'zh' ? '个信源' : 'sources'}</span>
           <a
             href={signal.sourceUrl}
             target="_blank"

@@ -20,7 +20,7 @@ export default function TrendingPanel({ locale, signals }: Props) {
       .slice(0, 5)
   }, [signals, locale])
 
-  if (trending.length === 0) return null
+  const hasData = trending.length > 0
 
   return (
     <PanelBase
@@ -31,32 +31,41 @@ export default function TrendingPanel({ locale, signals }: Props) {
       count={trending.length}
       collapsible
     >
-      <div className="space-y-2">
-        {trending.map((s, i) => {
-          const rankColor = i === 0 ? 'text-[#f59e0b]' : i === 1 ? 'text-[#8b8ba0]' : i === 2 ? 'text-[#5c5c72]' : 'text-[#3c3c52]'
-          const catColor = CATEGORY_COLORS[s.category] || 'text-gray-400'
-          return (
-            <div key={s.id} className="flex items-start gap-3 group cursor-default">
-              <span className={`text-xs font-mono w-4 text-center ${rankColor}`}>{i + 1}</span>
-              <div className="flex-1 min-w-0">
-                <div className="text-xs text-[#e5e5e5] group-hover:text-[#06b6d4] transition-colors line-clamp-1">{s.title}</div>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <span className={`text-[9px] ${catColor}`}>{locale === 'zh' ? ({ models: '模型', products: '产品', industry: '产业', papers: '论文', tips: '实战' }[s.category] || s.category) : s.category}</span>
-                  <span className="text-[8px] text-[#5c5c72]">●</span>
-                  <span className="text-[9px] text-[#5c5c72]">{s.sourcesCount} {locale === 'zh' ? '源' : 'src'}</span>
-                  <span className="text-[8px] text-[#5c5c72]">●</span>
-                  <span className="text-[9px] text-[#06b6d4]">{s.source}</span>
+      {hasData ? (
+        <div className="space-y-2">
+          {trending.map((s, i) => {
+            const rankColor = i === 0 ? 'text-[#f59e0b]' : i === 1 ? 'text-[#8b8ba0]' : i === 2 ? 'text-[#5c5c72]' : 'text-[#3c3c52]'
+            const catColor = CATEGORY_COLORS[s.category] || 'text-gray-400'
+            return (
+              <div key={s.id} className="flex items-start gap-3 group cursor-default">
+                <span className={`text-xs font-mono w-4 text-center ${rankColor}`}>{i + 1}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs text-[#e5e5e5] group-hover:text-[#06b6d4] transition-colors line-clamp-1">{s.title}</div>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className={`text-[11px] ${catColor}`}>{locale === 'zh' ? ({ models: '模型', products: '产品', industry: '产业', papers: '论文', tips: '实战' }[s.category] || s.category) : s.category}</span>
+                    <span className="text-[10px] text-[#5c5c72]">●</span>
+                    <span className="text-[11px] text-[#5c5c72]">{s.sourcesCount} {locale === 'zh' ? '源' : 'src'}</span>
+                    <span className="text-[10px] text-[#5c5c72]">●</span>
+                    <span className="text-[11px] text-[#06b6d4]">{s.source}</span>
+                  </div>
                 </div>
+                {i < 3 && (
+                  <span className="shrink-0 px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded bg-[#f59e0b]/10 text-[#f59e0b] border border-[#f59e0b]/20">
+                    HOT
+                  </span>
+                )}
               </div>
-              {i < 3 && (
-                <span className="shrink-0 px-1 py-0.5 text-[8px] font-semibold uppercase tracking-wider rounded bg-[#f59e0b]/10 text-[#f59e0b] border border-[#f59e0b]/20">
-                  HOT
-                </span>
-              )}
-            </div>
-          )
-        })}
-      </div>
+            )
+          })}
+        </div>
+      ) : (
+        <div className="flex items-center justify-center h-24">
+          <div className="text-center">
+            <div className="text-2xl text-[#1e1e2e] mb-2">◇</div>
+            <p className="text-[11px] text-[#5c5c72]">{locale === 'zh' ? '暂无热点' : 'No trending yet'}</p>
+          </div>
+        </div>
+      )}
     </PanelBase>
   )
 }

@@ -25,7 +25,7 @@ function StockTicker({ locale }: { locale: Locale }) {
           <button
             key={s.key}
             onClick={() => setSector(s.key)}
-            className={`px-2 py-0.5 text-[9px] rounded-full transition-colors ${
+            className={`px-2 py-0.5 text-[11px] rounded-full transition-colors ${
               sector === s.key ? 'bg-[#06b6d4]/15 text-[#06b6d4]' : 'text-[#5c5c72] hover:text-[#8b8ba0]'
             }`}
           >
@@ -38,11 +38,11 @@ function StockTicker({ locale }: { locale: Locale }) {
           <div key={stock.symbol} className="flex items-center gap-2 py-0.5 group hover:bg-[#16162a] rounded px-1 transition-colors cursor-default">
             <div className="flex items-center gap-1.5 w-16 shrink-0">
               <span className={`w-1 h-1 rounded-full ${stock.market === 'US' ? 'bg-cyan-400' : 'bg-amber-400'}`} />
-              <span className="text-[10px] font-mono text-[#e5e5e5]">{stock.symbol}</span>
+              <span className="text-[11px] font-mono text-[#e5e5e5]">{stock.symbol}</span>
             </div>
-            <span className="text-[9px] text-[#5c5c72] flex-1 truncate">{locale === 'zh' ? stock.nameZh : stock.name}</span>
-            <span className="text-[10px] font-mono text-[#e5e5e5] w-16 text-right">${stock.price.toFixed(2)}</span>
-            <span className={`text-[9px] font-mono w-14 text-right ${stock.change >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+            <span className="text-[11px] text-[#5c5c72] flex-1 truncate">{locale === 'zh' ? stock.nameZh : stock.name}</span>
+            <span className="text-[11px] font-mono text-[#e5e5e5] w-16 text-right">${stock.price.toFixed(2)}</span>
+            <span className={`text-[11px] font-mono w-14 text-right ${stock.change >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
               {stock.change >= 0 ? '+' : ''}{stock.changePct.toFixed(2)}%
             </span>
           </div>
@@ -57,7 +57,7 @@ function EventImpactFeed({ locale }: { locale: Locale }) {
 
   return (
     <div className="space-y-1.5">
-      <div className="text-[9px] font-semibold uppercase tracking-[0.1em] text-[#5c5c72] mb-1">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[#5c5c72] mb-1">
         {locale === 'zh' ? 'AI 事件 · 市场影响' : 'AI Events · Market Impact'}
       </div>
       {AI_EVENT_IMPACTS.slice(0, 4).map(event => {
@@ -76,24 +76,24 @@ function EventImpactFeed({ locale }: { locale: Locale }) {
             onClick={() => setExpanded(isExpanded ? null : event.id)}
           >
             <div className="flex items-start gap-1.5">
-              <span className={`text-[10px] mt-0.5 ${impactColor}`}>
+              <span className={`text-[12px] mt-0.5 ${impactColor}`}>
                 {event.impact === 'positive' ? '▲' : event.impact === 'negative' ? '▼' : '◆'}
               </span>
               <div className="flex-1 min-w-0">
-                <div className="text-[10px] text-[#e5e5e5] leading-snug line-clamp-2">
+                <div className="text-[12px] text-[#e5e5e5] leading-snug line-clamp-2">
                   {locale === 'zh' ? event.titleZh : event.title}
                 </div>
                 {isExpanded && (
-                  <div className="mt-1 text-[9px] text-[#8b8ba0] leading-relaxed">
+                  <div className="mt-1 text-[11px] text-[#8b8ba0] leading-relaxed">
                     {locale === 'zh' ? event.summaryZh : event.summary}
                   </div>
                 )}
                 <div className="flex items-center gap-2 mt-1">
-                  <span className={`text-[8px] font-semibold ${impactColor}`}>{impactLabel}</span>
-                  <span className="text-[7px] text-[#5c5c72]">·</span>
-                  <span className="text-[8px] text-[#5c5c72]">{event.affectedStocks.join(', ')}</span>
-                  <span className="text-[7px] text-[#5c5c72]">·</span>
-                  <span className="text-[8px] text-[#5c5c72]">{event.source}</span>
+                  <span className={`text-[10px] font-semibold ${impactColor}`}>{impactLabel}</span>
+                  <span className="text-[9px] text-[#5c5c72]">·</span>
+                  <span className="text-[10px] text-[#5c5c72]">{event.affectedStocks.join(', ')}</span>
+                  <span className="text-[9px] text-[#5c5c72]">·</span>
+                  <span className="text-[10px] text-[#5c5c72]">{event.source}</span>
                 </div>
               </div>
             </div>
@@ -110,25 +110,25 @@ function InfraMini({ locale }: { locale: Locale }) {
 
   return (
     <div>
-      <div className="text-[9px] font-semibold uppercase tracking-[0.1em] text-[#5c5c72] mb-1.5">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[#5c5c72] mb-1.5">
         {locale === 'zh' ? 'AI 基础设施' : 'AI Infrastructure'}
       </div>
       <div className="grid grid-cols-2 gap-2 mb-2">
         <div className="bg-[#0c0c14] rounded-lg p-2 text-center">
-          <div className="text-xs font-bold text-[#06b6d4]">{(totalGPU / 10000).toFixed(0)}万</div>
-          <div className="text-[7px] text-[#5c5c72]">{locale === 'zh' ? 'GPU 总量' : 'Total GPUs'}</div>
+          <div className="text-sm font-bold text-[#06b6d4]">{(totalGPU / 10000).toFixed(0)}万</div>
+          <div className="text-[10px] text-[#5c5c72]">{locale === 'zh' ? 'GPU 总量' : 'Total GPUs'}</div>
         </div>
         <div className="bg-[#0c0c14] rounded-lg p-2 text-center">
-          <div className="text-xs font-bold text-[#f59e0b]">{totalPower}MW</div>
-          <div className="text-[7px] text-[#5c5c72]">{locale === 'zh' ? '总功耗' : 'Total Power'}</div>
+          <div className="text-sm font-bold text-[#f59e0b]">{totalPower}MW</div>
+          <div className="text-[10px] text-[#5c5c72]">{locale === 'zh' ? '总功耗' : 'Total Power'}</div>
         </div>
       </div>
       <div className="space-y-1 max-h-24 overflow-y-auto">
         {AI_INFRA.map(item => (
-          <div key={item.id} className="flex items-center gap-2 text-[9px] py-0.5">
+          <div key={item.id} className="flex items-center gap-2 text-[11px] py-0.5">
             <span className={`w-1 h-1 rounded-full shrink-0 ${item.status === 'operational' ? 'bg-emerald-400' : item.status === 'building' ? 'bg-amber-400' : 'bg-[#5c5c72]'}`} />
-            <span className="text-[#8b8ba0] truncate flex-1">{locale === 'zh' ? item.nameZh : item.name}</span>
-            <span className="text-[#5c5c72]">{locale === 'zh' ? item.locationZh : item.location}</span>
+            <span className="text-[11px] text-[#8b8ba0] truncate flex-1">{locale === 'zh' ? item.nameZh : item.name}</span>
+            <span className="text-[11px] text-[#5c5c72]">{locale === 'zh' ? item.locationZh : item.location}</span>
           </div>
         ))}
       </div>

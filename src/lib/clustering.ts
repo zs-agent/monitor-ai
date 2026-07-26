@@ -4,7 +4,7 @@ export interface ClusteredSignal {
   id: string
   title: string
   summary: string
-  url: string
+  sourceUrl: string
   source: string
   sourceCount: number
   sources: string[]
@@ -62,7 +62,7 @@ export function clusterSignals(signals: Signal[]): (Signal | ClusteredSignal)[] 
         id: `cluster-${best.id}`,
         title: best.title,
         summary: `${items.length} sources reporting`,
-        url: best.sourceUrl,
+        sourceUrl: best.sourceUrl,
         source: best.source,
         sourceCount: items.length,
         sources: items.map(s => s.source),

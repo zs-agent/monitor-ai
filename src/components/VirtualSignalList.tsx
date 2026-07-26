@@ -25,11 +25,11 @@ export default function VirtualSignalList<T extends { id: string }>({
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
-          setVisibleRange(prev => {
-            const nextEnd = Math.min(prev.end + BATCH_SIZE, items.length)
-            if (nextEnd === prev.end) return prev
-            return { start: 0, end: nextEnd }
-          })
+       setVisibleRange(prev => {
+         const nextEnd = Math.min(prev.end + BATCH_SIZE, items.length)
+         if (nextEnd === prev.end) return prev
+         return { start: prev.start, end: nextEnd }
+       })
         }
       },
       { rootMargin: '200px' }

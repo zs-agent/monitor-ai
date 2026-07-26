@@ -59,12 +59,12 @@ export default function ComparisonPanel({ locale, signals }: Props) {
         <div className="flex items-center gap-1.5">
           <span className="text-base">🇺🇸</span>
           <span className="text-xs font-semibold text-[#e5e5e5]">United States</span>
-          <span className="text-[8px] font-mono px-1.5 py-0.5 rounded bg-[#06b6d4]/10 text-[#06b6d4]">LEAD</span>
+          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#06b6d4]/10 text-[#06b6d4]">LEAD</span>
         </div>
         <div className="flex items-center gap-1.5">
           <span className="text-base">🇨🇳</span>
           <span className="text-xs font-semibold text-[#e5e5e5]">China</span>
-          <span className="text-[8px] font-mono px-1.5 py-0.5 rounded bg-[#f59e0b]/10 text-[#f59e0b]">CHASE</span>
+          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#f59e0b]/10 text-[#f59e0b]">CHASE</span>
         </div>
       </div>
 

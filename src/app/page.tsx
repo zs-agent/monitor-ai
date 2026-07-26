@@ -12,15 +12,13 @@ import { getLocale, getTranslations, type Locale } from '@/lib/i18n'
 import type { Signal } from '@/types/signal'
 import type { DataFreshnessSummary } from '@/lib/data-freshness'
 import { persistBootstrap } from '@/lib/bootstrap'
-import { clusterSignals } from '@/lib/clustering'
+import { clusterSignals, type ClusteredSignal } from '@/lib/clustering'
 import LocaleSwitcher from '@/components/LocaleSwitcher'
-import ActivityBar from '@/components/ActivityBar'
 import TrendingPanel from '@/components/TrendingPanel'
-import TopSources from '@/components/TopSources'
+import CompanyRadar from '@/components/CompanyRadar'
 import TimeRangeFilter from '@/components/TimeRangeFilter'
 import BreakingNewsBanner from '@/components/BreakingNewsBanner'
 import MonitorPanel from '@/components/MonitorPanel'
-import SignalBreakdown from '@/components/SignalBreakdown'
 import FloatingChat from '@/components/FloatingChat'
 import SignalDetailModal from '@/components/SignalDetailModal'
 import VirtualSignalList from '@/components/VirtualSignalList'
@@ -41,7 +39,7 @@ export default function Home() {
   const [activeCategory, setActiveCategory] = useState<Category>('all')
   const [loading, setLoading] = useState(true)
   const [timeRange, setTimeRange] = useState('24h')
-  const [selectedSignal, setSelectedSignal] = useState<Signal | null>(null)
+  const [selectedSignal, setSelectedSignal] = useState<Signal | ClusteredSignal | null>(null)
 
   const API_BASE = process.env.NEXT_PUBLIC_API_URL || ''
 
@@ -69,7 +67,19 @@ export default function Home() {
   }, [])
 
   const signals = useMemo(() => apiData?.signals || [], [apiData?.signals])
-  const filteredSignals = useMemo(() => signals, [signals])
+  const filteredSignals = useMemo(() => {
+    let result = signals
+    if (activeCategory !== 'all') {
+      result = result.filter(s => s.category === activeCategory)
+    }
+    if (timeRange !== 'all') {
+      const now = Date.now()
+      const ranges: Record<string, number> = { '24h': 86400000, '7d': 604800000, '30d': 2592000000 }
+      const cutoff = now - (ranges[timeRange] || 0)
+      result = result.filter(s => new Date(s.publishedAt).getTime() > cutoff)
+    }
+    return result
+  }, [signals, activeCategory, timeRange])
   const clusteredSignals = useMemo(() => {
     if (filteredSignals.length < 3) return filteredSignals
     return clusterSignals(filteredSignals)
@@ -159,16 +169,16 @@ export default function Home() {
 
       {/* === Main Content === */}
       <main className="flex-1 overflow-y-auto p-3 sm:p-4 main-content">
-        {/* Row 1: Map (6) + AI Market Insight (4) */}
-        <div className="grid grid-cols-1 lg:grid-cols-[6fr_4fr] gap-3 mb-3">
+        {/* Row 1: Map (6) + AI Market Insight (4) — fixed height so the map is large enough */}
+        <div className="grid grid-cols-1 lg:grid-cols-[6fr_4fr] gap-3 mb-3 lg:h-[560px]">
           <DashboardMap locale={locale} signals={signals} />
           <AIMarketInsightPanel locale={locale} signals={signals} />
         </div>
 
-        {/* Row 2: Leaderboard (left) | Trending + News (right) */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
+        {/* Row 2: Leaderboard (wide) | Trending + News (narrow, bottom-aligned with leaderboard) */}
+        <div className="grid grid-cols-1 lg:grid-cols-[7fr_5fr] gap-3 mb-3 lg:items-stretch">
           <LeaderboardPanel locale={locale} />
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-3 min-h-0">
             <TrendingPanel locale={locale} signals={signals} />
             <NewsTimeline locale={locale} signals={signals} onSignalClick={setSelectedSignal} />
           </div>
@@ -180,17 +190,10 @@ export default function Home() {
           <TrendChartPanel locale={locale} />
         </div>
 
-        {/* Dashboard Panels Row */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
-          <ActivityBar locale={locale} signals={signals} />
-          <TrendingPanel locale={locale} signals={signals} />
-          <TopSources locale={locale} signals={signals} />
-        </div>
-
-        {/* Monitor + Signal Breakdown */}
+        {/* Row 4: Vendor Radar + Keyword Monitor */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+          <CompanyRadar locale={locale} signals={signals} />
           <MonitorPanel signals={signals} locale={locale} />
-          <SignalBreakdown signals={signals} locale={locale} />
         </div>
 
         {/* Section header */}
@@ -237,7 +240,7 @@ export default function Home() {
         ) : (
           <VirtualSignalList
             items={clusteredSignals}
-            renderItem={(signal: any) => (
+            renderItem={(signal: Signal | ClusteredSignal) => (
               <SignalCard signal={signal} locale={locale} onClick={() => setSelectedSignal(signal)} />
             )}
           />

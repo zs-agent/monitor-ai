@@ -93,10 +93,10 @@ export default function TrendChartPanel({ locale }: Props) {
     >
       <div className="p-3">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-[9px] font-semibold uppercase tracking-[0.1em] text-[#5c5c72]">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[#5c5c72]">
             {locale === 'zh' ? '2025 Q1 — 2026 Q2' : '2025 Q1 — 2026 Q2'}
           </span>
-          <div className="flex items-center gap-3 text-[8px]">
+          <div className="flex items-center gap-3 text-[10px]">
             <span className="flex items-center gap-1"><span className="w-2 h-0.5 rounded-full bg-[#06b6d4]" />US</span>
             <span className="flex items-center gap-1"><span className="w-2 h-0.5 rounded-full bg-[#f59e0b]" />CN</span>
           </div>
@@ -105,19 +105,19 @@ export default function TrendChartPanel({ locale }: Props) {
         <div className="grid grid-cols-4 gap-3 mt-3 pt-3 border-t border-[#1e1e2e]/50">
           <div className="text-center bg-[#0c0c14] rounded-lg py-2">
             <div className="text-xs font-bold text-[#06b6d4]">+125%</div>
-            <div className="text-[7px] text-[#5c5c72] mt-0.5">{locale === 'zh' ? '美国 1.5年增速' : 'US 1.5yr Growth'}</div>
+            <div className="text-[10px] text-[#5c5c72] mt-0.5">{locale === 'zh' ? '美国 1.5年增速' : 'US 1.5yr Growth'}</div>
           </div>
           <div className="text-center bg-[#0c0c14] rounded-lg py-2">
             <div className="text-xs font-bold text-[#f59e0b]">+150%</div>
-            <div className="text-[7px] text-[#5c5c72] mt-0.5">{locale === 'zh' ? '中国 1.5年增速' : 'CN 1.5yr Growth'}</div>
+            <div className="text-[10px] text-[#5c5c72] mt-0.5">{locale === 'zh' ? '中国 1.5年增速' : 'CN 1.5yr Growth'}</div>
           </div>
           <div className="text-center bg-[#0c0c14] rounded-lg py-2">
             <div className="text-xs font-bold text-[#e5e5e5]">27</div>
-            <div className="text-[7px] text-[#5c5c72] mt-0.5">{locale === 'zh' ? '美国 Q2 2026' : 'US Q2 2026'}</div>
+            <div className="text-[10px] text-[#5c5c72] mt-0.5">{locale === 'zh' ? '美国 Q2 2026' : 'US Q2 2026'}</div>
           </div>
           <div className="text-center bg-[#0c0c14] rounded-lg py-2">
             <div className="text-xs font-bold text-[#e5e5e5]">25</div>
-            <div className="text-[7px] text-[#5c5c72] mt-0.5">{locale === 'zh' ? '中国 Q2 2026' : 'CN Q2 2026'}</div>
+            <div className="text-[10px] text-[#5c5c72] mt-0.5">{locale === 'zh' ? '中国 Q2 2026' : 'CN Q2 2026'}</div>
           </div>
         </div>
       </div>

@@ -100,108 +100,110 @@ export default function NewsTimeline({ locale, signals, onSignalClick }: Props) 
       newCount={newCount}
       className="flex flex-col flex-1"
     >
-      <div
-        ref={listRef}
-        className="overflow-y-auto flex-1 min-h-0"
-        onMouseEnter={() => setPaused(true)}
-        onMouseLeave={() => setPaused(false)}
-      >
-        {sorted.length === 0 ? (
-          <div className="flex items-center justify-center h-48">
-            <div className="text-center">
-              <div className="text-2xl text-[#1e1e2e] mb-2">◇</div>
-              <p className="text-[11px] text-[#5c5c72]">{locale === 'zh' ? '暂无新闻' : 'No news yet'}</p>
+      <div className="flex flex-col h-full min-h-0">
+        <div
+          ref={listRef}
+          className="overflow-y-auto flex-1 min-h-0"
+          onMouseEnter={() => setPaused(true)}
+          onMouseLeave={() => setPaused(false)}
+        >
+          {sorted.length === 0 ? (
+            <div className="flex items-center justify-center h-48">
+              <div className="text-center">
+                <div className="text-2xl text-[#1e1e2e] mb-2">◇</div>
+                <p className="text-[11px] text-[#5c5c72]">{locale === 'zh' ? '暂无新闻' : 'No news yet'}</p>
+              </div>
             </div>
-          </div>
-        ) : (
-          <div className="relative py-3 px-4">
-            {/* Timeline vertical line */}
-            <div className="absolute left-[76px] top-0 bottom-0 w-px bg-[#1e1e2e]" />
+          ) : (
+            <div className="relative py-3 px-4">
+              {/* Timeline vertical line */}
+              <div className="absolute left-16 top-0 bottom-0 w-px bg-[#1e1e2e]" />
 
-            {sorted.map((signal, i) => {
-              const color = CAT_COLORS[signal.category] || '#5c5c72'
-              const catLabel = (CAT_LABELS[signal.category] || { en: '', zh: '' })
-              const isNew = highlightNew(i)
+              {sorted.map((signal, i) => {
+                const color = CAT_COLORS[signal.category] || '#5c5c72'
+                const catLabel = (CAT_LABELS[signal.category] || { en: '', zh: '' })
+                const isNew = highlightNew(i)
 
-              return (
-                <div
-                  key={signal.id}
-                  className={`relative flex items-start gap-3 py-2 px-2 rounded-lg transition-all duration-300 cursor-pointer hover:bg-[#16162a] group ${
-                    i === currentIndex ? 'bg-[#06b6d4]/5' : ''
-                  }`}
-                  onClick={() => onSignalClick(signal)}
-                >
-                  {/* Time column */}
-                  <div className="w-16 shrink-0 pt-0.5 text-right">
-                    <span className={`text-[8px] font-mono transition-colors duration-300 block ${
-                      i === currentIndex ? 'text-[#06b6d4]' : 'text-[#5c5c72]'
-                    }`}>
-                      {formatDate(signal.publishedAt, locale)}
-                    </span>
-                    <span className="text-[7px] font-mono text-[#3c3c52] block">
-                      {timeAgo(signal.publishedAt)}
-                    </span>
-                  </div>
-
-                  {/* Timeline dot */}
-                  <div className="relative shrink-0 pt-0.5" style={{ zIndex: 1 }}>
-                    <div className={`w-2.5 h-2.5 rounded-full border-2 transition-all duration-300 ${
-                      i === currentIndex
-                        ? 'border-[#06b6d4] bg-[#06b6d4] shadow-[0_0_6px_rgba(6,182,212,0.5)]'
-                        : 'border-[#1e1e2e] bg-[#0a0a0f] group-hover:border-[#06b6d4]/50'
+                return (
+                  <div
+                    key={signal.id}
+                    className={`relative flex items-start gap-3 py-2 px-2 rounded-lg transition-all duration-300 cursor-pointer hover:bg-[#16162a] group ${
+                      i === currentIndex ? 'bg-[#06b6d4]/5' : ''
                     }`}
-                      style={{ borderColor: i === currentIndex ? undefined : color + '40' }}
-                    />
-                  </div>
-
-                  {/* Content */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <span className={`text-[8px] font-semibold px-1.5 py-0.5 rounded-full border transition-all duration-300 ${
-                        i === currentIndex
-                          ? 'bg-[#06b6d4]/15 text-[#06b6d4] border-[#06b6d4]/30'
-                          : 'bg-transparent text-[#5c5c72] border-transparent'
-                      }`}
-                        style={i !== currentIndex ? { color: color + 'cc', borderColor: color + '30' } : undefined}
-                      >
-                        {locale === 'zh' ? catLabel.zh : catLabel.en}
+                    onClick={() => onSignalClick(signal)}
+                  >
+                    {/* Time column */}
+                    <div className="w-16 shrink-0 pt-0.5 text-right">
+                      <span className={`text-[10px] font-mono transition-colors duration-300 block ${
+                        i === currentIndex ? 'text-[#06b6d4]' : 'text-[#5c5c72]'
+                      }`}>
+                        {formatDate(signal.publishedAt, locale)}
                       </span>
-                      {isNew && (
-                        <span className="text-[7px] font-bold text-[#06b6d4] animate-pulse-slow">● NEW</span>
-                      )}
+                      <span className="text-[9px] font-mono text-[#3c3c52] block">
+                        {timeAgo(signal.publishedAt)}
+                      </span>
                     </div>
-                    <p className={`text-[11px] leading-snug transition-colors duration-300 line-clamp-2 ${
-                      i === currentIndex ? 'text-[#e5e5e5]' : 'text-[#8b8ba0]'
-                    }`}>
-                      {signal.title}
-                    </p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="text-[8px] text-[#5c5c72]">{signal.source}</span>
-                      {signal.importance >= 4 && (
-                        <span className="text-[8px] text-[#f59e0b]">🔥</span>
-                      )}
+
+                    {/* Timeline dot */}
+                    <div className="relative shrink-0 pt-0.5" style={{ zIndex: 1 }}>
+                      <div className={`w-2.5 h-2.5 rounded-full border-2 transition-all duration-300 ${
+                        i === currentIndex
+                          ? 'border-[#06b6d4] bg-[#06b6d4] shadow-[0_0_6px_rgba(6,182,212,0.5)]'
+                          : 'border-[#1e1e2e] bg-[#0a0a0f] group-hover:border-[#06b6d4]/50'
+                      }`}
+                        style={{ borderColor: i === currentIndex ? undefined : color + '40' }}
+                      />
+                    </div>
+
+                    {/* Content */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border transition-all duration-300 ${
+                          i === currentIndex
+                            ? 'bg-[#06b6d4]/15 text-[#06b6d4] border-[#06b6d4]/30'
+                            : 'bg-transparent text-[#5c5c72] border-transparent'
+                        }`}
+                          style={i !== currentIndex ? { color: color + 'cc', borderColor: color + '30' } : undefined}
+                        >
+                          {locale === 'zh' ? catLabel.zh : catLabel.en}
+                        </span>
+                        {isNew && (
+                          <span className="text-[9px] font-bold text-[#06b6d4] animate-pulse-slow">● NEW</span>
+                        )}
+                      </div>
+                      <p className={`text-[12px] leading-snug transition-colors duration-300 line-clamp-2 ${
+                        i === currentIndex ? 'text-[#e5e5e5]' : 'text-[#8b8ba0]'
+                      }`}>
+                        {signal.title}
+                      </p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-[10px] text-[#5c5c72]">{signal.source}</span>
+                        {signal.importance >= 4 && (
+                          <span className="text-[10px] text-[#f59e0b]">🔥</span>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              )
-            })}
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Auto-scroll indicator */}
+        {sorted.length > 5 && (
+          <div className="flex items-center justify-between px-4 py-2 border-t border-[#1e1e2e] text-[10px] text-[#5c5c72] shrink-0">
+            <span className="flex items-center gap-1.5">
+              <span className={`w-1.5 h-1.5 rounded-full ${paused ? 'bg-[#f59e0b]' : 'bg-[#06b6d4] animate-pulse-slow'}`} />
+              {paused
+                ? (locale === 'zh' ? '已暂停' : 'Paused')
+                : (locale === 'zh' ? '自动滚动中' : 'Auto-scrolling')
+              }
+            </span>
+            <span>{currentIndex + 1} / {sorted.length}</span>
           </div>
         )}
       </div>
-
-      {/* Auto-scroll indicator */}
-      {sorted.length > 5 && (
-        <div className="flex items-center justify-between px-4 py-2 border-t border-[#1e1e2e] text-[8px] text-[#5c5c72]">
-          <span className="flex items-center gap-1.5">
-            <span className={`w-1.5 h-1.5 rounded-full ${paused ? 'bg-[#f59e0b]' : 'bg-[#06b6d4] animate-pulse-slow'}`} />
-            {paused
-              ? (locale === 'zh' ? '已暂停' : 'Paused')
-              : (locale === 'zh' ? '自动滚动中' : 'Auto-scrolling')
-            }
-          </span>
-          <span>{currentIndex + 1} / {sorted.length}</span>
-        </div>
-      )}
     </PanelBase>
   )
 }
