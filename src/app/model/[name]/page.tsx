@@ -2,7 +2,8 @@
 
 import { useParams, useRouter } from 'next/navigation'
 import { LEADERBOARD_INTL, LEADERBOARD_CN, type LeaderboardEntry } from '@/data/leaderboard'
-import { useState, useEffect } from 'react'
+import { mockSignals } from '@/data/mock-signals'
+import { useState, useEffect, useMemo } from 'react'
 import { getLocale, type Locale } from '@/lib/i18n'
 
 function findModel(name: string): LeaderboardEntry | undefined {
@@ -21,6 +22,16 @@ export default function ModelDetailPage() {
   }, [])
 
   const model = findModel(name)
+  const relatedSignals = useMemo(() => {
+    if (!model) return []
+    const keywords = model.model.toLowerCase().split(/[\s()]/).filter(Boolean)
+    return mockSignals
+      .filter(s => {
+        const text = `${s.title} ${s.summary} ${s.tags.join(' ')}`.toLowerCase()
+        return keywords.some(kw => kw.length > 2 && text.includes(kw))
+      })
+      .slice(0, 5)
+  }, [model])
   if (!model) {
     return (
       <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center text-[#5c5c72]">
@@ -116,6 +127,30 @@ export default function ModelDetailPage() {
               </div>
             )}
           </div>
+        </div>
+
+        {/* Related Signals */}
+        <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl p-5">
+          <h3 className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#8b8ba0] mb-3">
+            {locale === 'zh' ? '相关信号' : 'Related Signals'}
+          </h3>
+          {relatedSignals.length === 0 ? (
+            <p className="text-[11px] text-[#5c5c72]">{locale === 'zh' ? '暂无相关信号' : 'No related signals'}</p>
+          ) : (
+            <div className="space-y-2">
+              {relatedSignals.map(s => (
+                <div key={s.id} className="border border-[#1e1e2e] rounded-lg px-3 py-2 hover:border-[#06b6d4]/20 transition-colors">
+                  <div className="flex items-start gap-2">
+                    <span className={`w-1.5 h-1.5 rounded-full mt-1 shrink-0 ${s.language === 'zh' ? 'bg-amber-400' : 'bg-cyan-400'}`} />
+                    <div className="min-w-0">
+                      <p className="text-[11px] text-[#e5e5e5]">{s.title}</p>
+                      <p className="text-[9px] text-[#5c5c72] mt-0.5">{s.source} · {s.category} · {s.importance}/5</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </main>
 

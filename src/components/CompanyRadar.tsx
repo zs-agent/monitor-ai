@@ -61,7 +61,7 @@ export default function CompanyRadar({ locale, signals }: Props) {
       .filter(s => s.total > 0)
       .sort((a, b) => b.total - a.total || b.peakImportance - a.peakImportance)
       .slice(0, showAllVendors ? undefined : 8)
-  }, [signals])
+  }, [signals, showAllVendors])
 
   const max = rows.length > 0 ? Math.max(...rows.map(r => r.total)) : 0
 

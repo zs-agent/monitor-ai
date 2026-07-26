@@ -7,6 +7,8 @@ import { dataFreshness } from '@/lib/data-freshness'
 import { mockSignals } from '@/data/mock-signals'
 import type { Signal } from '@/types/signal'
 
+const VALID_CATEGORIES = ['models', 'products', 'industry', 'papers', 'tips'] as const
+
 const cache = new Map<string, { signals: Signal[]; fetchedAt: number; sourceHealth: Record<string, string> }>()
 const CACHE_TTL = 5 * 60 * 1000
 
@@ -15,8 +17,15 @@ dataFreshness.register('huggingface', 'HuggingFace Papers')
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
-  const locale = (searchParams.get('locale') || 'en') as 'zh' | 'en'
+  const locale = searchParams.get('locale') || 'en'
   const category = searchParams.get('category') || 'all'
+
+  if (locale !== 'zh' && locale !== 'en') {
+    return NextResponse.json({ error: `Invalid locale '${locale}'. Must be 'zh' or 'en'.` }, { status: 400 })
+  }
+  if (category !== 'all' && !(VALID_CATEGORIES as readonly string[]).includes(category)) {
+    return NextResponse.json({ error: `Invalid category '${category}'. Must be one of: all, ${VALID_CATEGORIES.join(', ')}` }, { status: 400 })
+  }
 
   const cacheKey = `${locale}:${category}`
   const now = Date.now()
@@ -28,6 +37,9 @@ export async function GET(request: NextRequest) {
       fetchedAt: new Date(cached.fetchedAt).toISOString(),
       sourceHealth: cached.sourceHealth,
       freshness: dataFreshness.getSummary(),
+      cached: true,
+    }, {
+      headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600' },
     })
   }
 
@@ -40,16 +52,20 @@ export async function GET(request: NextRequest) {
 
   const hnSignals: Signal[] = []
   if (hnItems.status === 'fulfilled') {
-    hnItems.value.forEach(item => {
-      hnSignals.push(normalizeHNSignal(item, 'en'))
-      if (locale === 'zh') {
-        hnSignals.push({
-          ...normalizeHNSignal(item, 'zh'),
-          id: `hn-${item.id}-zh`,
-          language: 'zh',
-        })
+    for (const item of hnItems.value) {
+      try {
+        hnSignals.push(normalizeHNSignal(item, 'en'))
+        if (locale === 'zh') {
+          hnSignals.push({
+            ...normalizeHNSignal(item, 'zh'),
+            id: `hn-${item.id}-zh`,
+            language: 'zh',
+          })
+        }
+      } catch {
+        console.warn(`[signals] Skipping malformed HN item: ${item?.id ?? 'unknown'}`)
       }
-    })
+    }
     sourceHealth['hackernews'] = 'ok'
     dataFreshness.recordUpdate('hackernews', hnItems.value.length)
   } else {
@@ -59,16 +75,20 @@ export async function GET(request: NextRequest) {
 
   const hfSignals: Signal[] = []
   if (hfPapers.status === 'fulfilled') {
-    hfPapers.value.forEach(paper => {
-      hfSignals.push(normalizeHFPaper(paper, 'en'))
-      if (locale === 'zh') {
-        hfSignals.push({
-          ...normalizeHFPaper(paper, 'zh'),
-          id: `${paper.id}-zh`,
-          language: 'zh',
-        })
+    for (const paper of hfPapers.value) {
+      try {
+        hfSignals.push(normalizeHFPaper(paper, 'en'))
+        if (locale === 'zh') {
+          hfSignals.push({
+            ...normalizeHFPaper(paper, 'zh'),
+            id: `${paper.id}-zh`,
+            language: 'zh',
+          })
+        }
+      } catch {
+        console.warn(`[signals] Skipping malformed HF paper: ${paper?.id ?? 'unknown'}`)
       }
-    })
+    }
     sourceHealth['huggingface'] = 'ok'
     dataFreshness.recordUpdate('huggingface', hfPapers.value.length)
   } else {
@@ -86,6 +106,8 @@ export async function GET(request: NextRequest) {
         sourceHealth: stale.sourceHealth,
         freshness: dataFreshness.getSummary(),
         stale: true,
+      }, {
+        headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' },
       })
     }
   }
@@ -118,5 +140,7 @@ export async function GET(request: NextRequest) {
     fetchedAt: new Date(now).toISOString(),
     sourceHealth,
     freshness: dataFreshness.getSummary(),
+  }, {
+    headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600' },
   })
 }

@@ -38,11 +38,11 @@ function chineseBigramSimilarity(a: string, b: string): number {
   if (bigramsA.size === 0 || bigramsB.size === 0) return 0
 
   let common = 0
-  for (const bg of bigramsA) {
+  bigramsA.forEach(bg => {
     if (bigramsB.has(bg)) common++
-  }
+  })
 
-  const union = new Set([...bigramsA, ...bigramsB])
+  const union = new Set(Array.from(bigramsA).concat(Array.from(bigramsB)))
   return common / union.size
 }
 
@@ -69,7 +69,7 @@ function titleSimilarity(a: string, b: string): number {
 }
 
 function similarityThreshold(a: string, b: string): number {
-  if (hasChinese(a) || hasChinese(b)) return 0.25
+  if (hasChinese(a) || hasChinese(b)) return 0.30
   return 0.35
 }
 
@@ -107,7 +107,7 @@ export function clusterSignals(signals: Signal[]): (Signal | ClusteredSignal)[] 
         sources: items.map(s => s.source),
         publishedAt: best.publishedAt,
         category: best.category,
-        importance: Math.min(best.importance + 1, 5),
+        importance: Math.min(best.importance + (items.length > 2 ? 1 : 0), 5),
         language: best.language,
         isCluster: true,
         clusterItems: items.map(({ id: _, ...rest }) => rest),

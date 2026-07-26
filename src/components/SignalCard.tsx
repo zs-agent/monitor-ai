@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import type { CardSignal } from '@/types/signal'
 import { t, type Locale } from '@/lib/i18n'
 
@@ -44,6 +45,8 @@ export default function SignalCard({ signal, locale, onClick }: Props) {
   const isHigh = signal.importance >= 4
   const isCluster = 'isCluster' in signal && signal.isCluster
   const displaySourceCount = 'sourceCount' in signal ? signal.sourceCount : signal.sourcesCount
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
 
   return (
       <div className={`h-full flex flex-col group relative bg-[#12121a] border border-[#1e1e2e] rounded-lg transition-all duration-200 hover:bg-[#16162a] hover:border-[#06b6d4]/20 hover:shadow-[0_0_15px_rgba(6,182,212,0.06)] ${onClick ? 'cursor-pointer' : 'cursor-default'} ${isHigh ? 'ring-1 ring-[#06b6d4]/5' : ''}`}
@@ -81,7 +84,7 @@ export default function SignalCard({ signal, locale, onClick }: Props) {
           <span className="font-medium text-[#06b6d4]/60">{sourceLabel(signal)}</span>
           <span className="w-0.5 h-0.5 rounded-full bg-[#1e1e2e]" />
           {/* Time */}
-          <span className="font-mono">{timeAgo(signal.publishedAt)}</span>
+          <span className="font-mono">{mounted ? timeAgo(signal.publishedAt) : '--'}</span>
           <span className="w-0.5 h-0.5 rounded-full bg-[#1e1e2e]" />
           {/* Category tag */}
           <span className={CATEGORY_TEXT[signal.category] || 'text-gray-400/70'}>{t(`filter.${signal.category}`, locale)}</span>

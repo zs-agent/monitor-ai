@@ -20,7 +20,11 @@ async function fetchRepoSet(query: string, perPage: number): Promise<Repo[]> {
   const res = await fetch(
     `https://api.github.com/search/repositories?q=${encodeURIComponent(query)}&sort=stars&order=desc&per_page=${perPage}`,
     {
-      headers: { Accept: 'application/vnd.github.v3+json', 'User-Agent': 'monitor-ai/1.0' },
+      headers: (() => {
+        const h: Record<string, string> = { Accept: 'application/vnd.github.v3+json', 'User-Agent': 'monitor-ai/1.0' }
+        if (process.env.GITHUB_TOKEN) h['Authorization'] = `Bearer ${process.env.GITHUB_TOKEN}`
+        return h
+      })(),
       next: { revalidate: 900 },
     },
   )

@@ -12,7 +12,7 @@ interface Props { locale: Locale; signals: Signal[] }
  * Reusable auto-scroll list (continuous ticker)
  * ─────────────────────────────────────────────── */
 function AutoScrollList({ items, renderItem, speed = 20 }: {
-  items: { id: string }[]
+  items: { id: string | number }[]
   renderItem: (item: any, i: number) => React.ReactNode
   speed?: number
 }) {
@@ -31,7 +31,7 @@ function AutoScrollList({ items, renderItem, speed = 20 }: {
       .map(e => (e as HTMLElement).offsetHeight)
   }, [])
 
-  useEffect(() => { requestAnimationFrame(measure) }, [items])
+  useEffect(() => { requestAnimationFrame(measure) }, [items, measure])
 
   useEffect(() => {
     let running = true
@@ -61,11 +61,13 @@ function AutoScrollList({ items, renderItem, speed = 20 }: {
     return () => { running = false; cancelAnimationFrame(rafRef.current) }
   }, [speed])
 
+  // 数据不足时不复制（避免静态重复），直接显示单份
+  const needClone = items.length > 1
   return (
     <div className="overflow-hidden" style={{ minHeight: 0 }}>
       <div ref={stripRef} className="will-change-transform" style={{ transform: 'translateY(0px)' }}>
         <div>{items.map((item, i) => <div key={item.id} data-as-item>{renderItem(item, i)}</div>)}</div>
-        <div>{items.map((item, i) => <div key={`d-${item.id}`} data-as-item>{renderItem(item, i)}</div>)}</div>
+        {needClone && <div>{items.map((item, i) => <div key={`d-${item.id}`} data-as-item>{renderItem(item, i)}</div>)}</div>}
       </div>
     </div>
   )
@@ -179,14 +181,30 @@ function GitHubCard({ locale }: { locale: Locale }) {
  * ─────────────────────────────────────────────── */
 function PapersCard({ signals, locale }: { signals: Signal[]; locale: Locale }) {
   const threeMonthsAgo = Date.now() - 90 * 86400000
-  // Dedup by normalized title (remove punctuation, collapse spaces)
-  const seen = new Set<string>()
+  // Dedup: strip punctuation + collapse whitespace + extract alphanumeric core for cross-language matching
+  function normalizeKey(title: string): string {
+    return title.toLowerCase()
+      .replace(/[:\-–—,.\/\\()\[\]{}《》「」『』【】、，。！？；：""''【】+]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 50)
+  }
+  // Extract English alphanumeric tokens for cross-language dedup
+  function alphaKey(title: string): string {
+    return title.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40)
+  }
+  const seenFull = new Set<string>()
+  const seenAlpha = new Set<string>()
   const papers = signals
-    .filter(s => s.category === 'papers' && new Date(s.publishedAt).getTime() > threeMonthsAgo)
+    .filter(s => s.category === 'papers' && s.language === locale && new Date(s.publishedAt).getTime() > threeMonthsAgo)
     .filter(s => {
-      const key = s.title.toLowerCase().replace(/[:\-–—,.\/\\()\[\]{}《》「」『』【】、，。！？；：""''【】]/g, '').replace(/\s+/g, ' ').trim().slice(0, 50)
-      if (seen.has(key)) return false
-      seen.add(key)
+      const full = normalizeKey(s.title)
+      if (seenFull.has(full)) return false
+      seenFull.add(full)
+      // Cross-language dedup: if same English alpha core already seen, skip
+      const alpha = alphaKey(full)
+      if (alpha && seenAlpha.has(alpha)) return false
+      if (alpha) seenAlpha.add(alpha)
       return true
     })
     .slice(0, 7)

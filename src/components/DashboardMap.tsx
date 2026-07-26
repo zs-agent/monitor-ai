@@ -146,6 +146,15 @@ const ENTITY_MAP: Record<string, [number, number]> = {
   'ymtc': [30.520, 114.420],
 }
 
+function hashId(id: string): number {
+  let hash = 0
+  for (let i = 0; i < id.length; i++) {
+    hash = ((hash << 5) - hash) + id.charCodeAt(i)
+    hash |= 0
+  }
+  return Math.abs(hash) / 0x7FFFFFFF
+}
+
 function extractSignalLocations(signals?: Signal[]): Array<{ lat: number; lng: number; title: string; source: string; id: string }> {
   if (!signals) return []
   const locs: Array<{ lat: number; lng: number; title: string; source: string; id: string }> = []
@@ -158,7 +167,7 @@ function extractSignalLocations(signals?: Signal[]): Array<{ lat: number; lng: n
     for (const [entity, coords] of Object.entries(ENTITY_MAP)) {
       if (text.includes(entity)) {
         seen.add(signal.id)
-        locs.push({ lat: coords[0] + (Math.random() - 0.5) * 0.1, lng: coords[1] + (Math.random() - 0.5) * 0.1, title: signal.title.slice(0, 60), source: signal.source, id: signal.id })
+        locs.push({ lat: coords[0] + (hashId(signal.id) - 0.5) * 0.1, lng: coords[1] + (hashId(signal.id) - 0.5) * 0.1, title: signal.title.slice(0, 60), source: signal.source, id: signal.id })
         break
       }
     }
@@ -167,7 +176,7 @@ function extractSignalLocations(signals?: Signal[]): Array<{ lat: number; lng: n
     for (const [city, coords] of Object.entries(CITY_MAP)) {
       if (text.includes(city)) {
         seen.add(signal.id)
-        locs.push({ lat: coords[0] + (Math.random() - 0.5) * 0.2, lng: coords[1] + (Math.random() - 0.5) * 0.2, title: signal.title.slice(0, 60), source: signal.source, id: signal.id })
+        locs.push({ lat: coords[0] + (hashId(signal.id) - 0.5) * 0.2, lng: coords[1] + (hashId(signal.id) - 0.5) * 0.2, title: signal.title.slice(0, 60), source: signal.source, id: signal.id })
         break
       }
     }

@@ -115,7 +115,13 @@ export default function NewsTimeline({ locale, signals, onSignalClick }: Props) 
   const sorted = useMemo(() => {
     return [...signals]
       .filter(s => s.title?.length > 0 && s.category !== 'papers')
-      .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
+      .sort((a, b) => {
+        const timeA = new Date(a.publishedAt).getTime()
+        const timeB = new Date(b.publishedAt).getTime()
+        const scoreA = timeA + (a.importance * 30 * 60 * 1000)
+        const scoreB = timeB + (b.importance * 30 * 60 * 1000)
+        return scoreB - scoreA
+      })
       .slice(0, 7)
   }, [signals])
 
@@ -275,7 +281,7 @@ export default function NewsTimeline({ locale, signals, onSignalClick }: Props) 
                           catLabel={catLabel}
                           isActive={false}
                           locale={locale}
-                          onClick={() => handleClick(signal)}
+                          onClick={() => handleClick({...signal, id: signal.id + '-copy'})}
                         />
                       </div>
                     )

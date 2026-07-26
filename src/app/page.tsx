@@ -23,6 +23,10 @@ import SignalDetailModal from '@/components/SignalDetailModal'
 import VirtualSignalList from '@/components/VirtualSignalList'
 import { usePolling } from '@/lib/use-polling'
 import ErrorBoundary from '@/components/ErrorBoundary'
+import MarketTickerPanel from '@/components/MarketTickerPanel'
+import InfrastructurePanel from '@/components/InfrastructurePanel'
+import SourceHealthPanel from '@/components/SourceHealthPanel'
+import AnalyticsDashboard from '@/components/AnalyticsDashboard'
 
 const CATEGORIES = [
   { key: 'all', label: 'All' },
@@ -48,7 +52,7 @@ function DashboardContent() {
 
   const API_BASE = process.env.NEXT_PUBLIC_API_URL || ''
 
-  const { data: apiData, loading: apiLoading } = usePolling<{
+  const { data: apiData, loading: apiLoading, refetch } = usePolling<{
     signals: Signal[]
     fetchedAt: string
     sourceHealth: Record<string, string>
@@ -65,6 +69,10 @@ function DashboardContent() {
   useEffect(() => {
     setLocaleState(getLocale())
   }, [])
+
+  useEffect(() => {
+    refetch()
+  }, [locale, refetch])
 
   // Sync category and timeRange to URL search params
   useEffect(() => {
@@ -206,6 +214,22 @@ function DashboardContent() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
           <CompanyRadar locale={locale} signals={filteredSignals} />
           <MonitorPanel signals={filteredSignals} locale={locale} />
+        </div>
+
+        {/* Row 5: Market Ticker + Infrastructure + Source Health + Analytics */}
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 mb-3">
+          <MarketTickerPanel locale={locale} />
+          <InfrastructurePanel locale={locale} />
+          <SourceHealthPanel locale={locale} sources={
+            Object.entries(sourceHealth).map(([id, status]) => ({
+              id,
+              name: id === 'hackernews' ? 'Hacker News' : id === 'huggingface' ? 'HuggingFace Papers' : id,
+              status: status === 'ok' ? 'fresh' : 'error',
+              lastUpdate: Date.now(),
+              itemCount: signals.length,
+            }))
+          } />
+          <AnalyticsDashboard locale={locale} />
         </div>
 
         {/* Section header */}
