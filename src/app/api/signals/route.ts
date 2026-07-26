@@ -1,3 +1,4 @@
+// This is a Next.js API route handler (not a React component)
 import { NextRequest, NextResponse } from 'next/server'
 import { fetchHNTopStories } from '@/lib/hn'
 import { fetchHFPapers } from '@/lib/huggingface'
@@ -6,7 +7,7 @@ import { dataFreshness } from '@/lib/data-freshness'
 import { mockSignals } from '@/data/mock-signals'
 import type { Signal } from '@/types/signal'
 
-let cache: { signals: Signal[]; fetchedAt: number; sourceHealth: Record<string, string> } | null = null
+const cache = new Map<string, { signals: Signal[]; fetchedAt: number; sourceHealth: Record<string, string> }>()
 const CACHE_TTL = 5 * 60 * 1000
 
 dataFreshness.register('hackernews', 'Hacker News')
@@ -17,14 +18,15 @@ export async function GET(request: NextRequest) {
   const locale = (searchParams.get('locale') || 'en') as 'zh' | 'en'
   const category = searchParams.get('category') || 'all'
 
+  const cacheKey = `${locale}:${category}`
   const now = Date.now()
-  if (cache && (now - cache.fetchedAt) < CACHE_TTL) {
-    let signals = cache.signals.filter(s => s.language === locale)
-    if (category !== 'all') signals = signals.filter(s => s.category === category)
+
+  const cached = cache.get(cacheKey)
+  if (cached && (now - cached.fetchedAt) < CACHE_TTL) {
     return NextResponse.json({
-      signals: signals.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()),
-      fetchedAt: new Date(cache.fetchedAt).toISOString(),
-      sourceHealth: cache.sourceHealth,
+      signals: cached.signals,
+      fetchedAt: new Date(cached.fetchedAt).toISOString(),
+      sourceHealth: cached.sourceHealth,
       freshness: dataFreshness.getSummary(),
     })
   }
@@ -74,6 +76,20 @@ export async function GET(request: NextRequest) {
     dataFreshness.recordError('huggingface', 'API unavailable')
   }
 
+  // If both HN and HF failed, try returning stale cached data rather than nothing
+  if (hnItems.status === 'rejected' && hfPapers.status === 'rejected') {
+    const stale = cache.get(cacheKey)
+    if (stale) {
+      return NextResponse.json({
+        signals: stale.signals,
+        fetchedAt: new Date(stale.fetchedAt).toISOString(),
+        sourceHealth: stale.sourceHealth,
+        freshness: dataFreshness.getSummary(),
+        stale: true,
+      })
+    }
+  }
+
   const allSignals = [...hnSignals, ...hfSignals, ...mockSignals]
 
   const seen = new Set<string>()
@@ -86,17 +102,19 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  cache = {
-    signals: unique,
-    fetchedAt: now,
-    sourceHealth,
-  }
-
   let filtered = unique.filter(s => s.language === locale)
   if (category !== 'all') filtered = filtered.filter(s => s.category === category)
 
+  const sorted = filtered.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
+
+  cache.set(cacheKey, {
+    signals: sorted,
+    fetchedAt: now,
+    sourceHealth,
+  })
+
   return NextResponse.json({
-    signals: filtered.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()),
+    signals: sorted,
     fetchedAt: new Date(now).toISOString(),
     sourceHealth,
     freshness: dataFreshness.getSummary(),

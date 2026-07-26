@@ -6,5 +6,130 @@
   "lang": { "switch": "EN" },
   "loading": "加载中...",
   "error": "加载失败，请重试",
-  "noSignals": "暂无信号"
+  "noSignals": "暂无信号",
+  "panel": {
+    "live": "实时",
+    "cached": "缓存",
+    "static": "参考",
+    "unavailable": "离线",
+    "retry": "重试",
+    "retrying": "重试中 ({seconds}秒)",
+    "expand": "展开",
+    "collapse": "折叠"
+  },
+  "map": {
+    "title": "全球 AI 活动地图",
+    "loading": "加载地图...",
+    "layers": "图层",
+    "company": "公司",
+    "research": "研究机构",
+    "chip": "芯片/硬件",
+    "datacenter": "数据中心",
+    "signal": "信号",
+    "connections": "关系连线",
+    "signals_nearby": "{count} 条附近信号",
+    "models": "旗下模型",
+    "connections_title": "关系连线",
+    "visible_hubs": "{count} 个可见据点",
+    "connections_count": "{count} 条连线",
+    "importance": "重要度"
+  },
+  "market": {
+    "title": "AI 市场洞察",
+    "sector_all": "全部",
+    "sector_chip": "芯片",
+    "sector_cloud": "云",
+    "sector_infra": "基础设施",
+    "events_title": "AI 事件 · 市场影响",
+    "infra_title": "AI 基础设施",
+    "total_gpus": "GPU 总量",
+    "total_power": "总功耗",
+    "disclaimer": "参考数据 (非实时)"
+  },
+  "leaderboard": {
+    "title": "大模型排行",
+    "global": "国际排行",
+    "china": "国内排行",
+    "model": "模型",
+    "org": "机构",
+    "arena": "Arena",
+    "source": "数据来源",
+    "models_count": "{count} 个模型"
+  },
+  "comparison": {
+    "title": "中美 AI 实力对比",
+    "us": "United States",
+    "cn": "China",
+    "lead": "领先",
+    "chase": "追赶",
+    "signals_this_week": "{count} 条本周信号",
+    "models_dim": "模型",
+    "funding_dim": "资金",
+    "patents_dim": "专利",
+    "talent_dim": "人才",
+    "infra_dim": "算力",
+    "opensrc_dim": "开源",
+    "top_us": "OpenAI, Anthropic, Meta, xAI",
+    "top_cn": "DeepSeek, 阿里, 腾讯, 智谱",
+    "qoq_us": "+17%",
+    "qoq_cn": "+14%",
+    "us_growth": "美国增速",
+    "cn_growth": "中国增速",
+    "disclaimer": "基于公开数据的估算"
+  },
+  "timeline": {
+    "title": "AI 新闻时间轴",
+    "no_news": "暂无新闻",
+    "auto_scrolling": "自动滚动中",
+    "paused": "已暂停"
+  },
+  "radar": {
+    "title": "厂商动向雷达",
+    "empty": "暂无厂商信号",
+    "ranked_by": "按提及量排序",
+    "rising_12h": "近12h上升"
+  },
+  "monitor": {
+    "title": "关键词监控",
+    "placeholder": "输入关键词, 以逗号分隔...",
+    "add": "添加",
+    "no_matches": "暂无匹配信号",
+    "trending": "热门关键词 · 点击快速添加"
+  },
+  "chat": {
+    "title": "AI 分析师",
+    "placeholder": "问个问题...",
+    "empty": "问我关于当前 AI 局势的问题...",
+    "no_data": "暂无数据",
+    "no_trending": "暂无热点",
+    "response_template": "收到。当前 {count} 条信号。源: {sources}",
+    "disclaimer": "此为基于规则的助手，使用当前信号数据"
+  },
+  "detail": {
+    "title": "信号详情",
+    "source": "信源",
+    "time": "时间",
+    "category": "分类",
+    "importance": "重要度",
+    "tags": "标签",
+    "view_source": "查看原文 →",
+    "sources_count": "{count} 个信源"
+  },
+  "status": {
+    "signals": "信号",
+    "high": "high",
+    "sources": "源",
+    "signals_count_zh": "{count} 条信号",
+    "signal_stream": "信号流"
+  },
+  "breaking": {
+    "label": "BREAKING",
+    "label_zh": "突发"
+  },
+  "time": {
+    "24h": "24小时",
+    "7d": "7天",
+    "30d": "30天",
+    "all": "全部"
+  }
 }

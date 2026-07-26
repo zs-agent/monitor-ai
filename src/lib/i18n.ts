@@ -37,3 +37,8 @@ export function t(key: string, locale: Locale): string {
   }
   return typeof result === 'string' ? result : key
 }
+
+export function tOrFallback(key: string, locale: Locale, fallback: string): string {
+  const result = t(key, locale)
+  return result === key ? fallback : result
+}

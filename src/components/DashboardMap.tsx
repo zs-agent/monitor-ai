@@ -183,6 +183,61 @@ const TYPE_LABELS: Record<string, { en: string; zh: string }> = {
   chip: { en: 'Chip/Hardware', zh: '芯片/硬件' },
 }
 
+function HubPopupContent({
+  displayName, displayCity, country, color, typeDisplay, importance,
+  description, models, connected, nearbySignals, isZh,
+}: {
+  displayName: string; displayCity: string; country: string;
+  color: string; typeDisplay: string; importance: number;
+  description?: string; models: any[]; connected: any[]; nearbySignals: number; isZh: boolean;
+}) {
+  const importanceDots = '●'.repeat(importance) + '○'.repeat(5 - importance)
+  return (
+    <div style={{ fontSize: '11px', color: '#e5e5e5', lineHeight: 1.5, minWidth: 240, maxWidth: 320 }}>
+      <div style={{ fontWeight: 600, fontSize: '14px', marginBottom: 2 }}>{displayName}</div>
+      <div style={{ color: '#5c5c72', marginBottom: 6, fontSize: '10px' }}>{displayCity}, {country}</div>
+      <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: '8px', padding: '2px 8px', borderRadius: 3, background: `${color}20`, color, border: `1px solid ${color}40` }}>{typeDisplay}</span>
+        <span style={{ fontSize: '9px', color: '#8b8ba0' }}>{isZh ? '重要度' : 'Importance'}: {importanceDots}</span>
+      </div>
+      {description ? <div style={{ fontSize: '10px', color: '#8b8ba0', marginBottom: 8, padding: '6px 8px', background: '#0c0c14', borderRadius: 4 }}>📋 {description}</div> : null}
+      {models.length > 0 ? (
+        <div style={{ marginTop: 4, borderTop: '1px solid #1e1e2e', paddingTop: 6 }}>
+          <div style={{ fontSize: '9px', color: '#5c5c72', marginBottom: 4, fontWeight: 600 }}>{isZh ? '旗下模型' : 'Models'} ({models.length})</div>
+          {models.map((m: any, i: number) => (
+            <div key={i} style={{ fontSize: '9px', padding: '3px 0', borderBottom: '1px solid #1e1e2e30' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ color: '#e5e5e5', fontWeight: 500 }}>{m.name}</span>
+                <span style={{ fontSize: '7px', color: '#5c5c72' }}>{m.version}</span>
+                <span style={{ fontSize: '7px', color: '#06b6d4', marginLeft: 'auto' }}>{m.releaseYear}</span>
+              </div>
+              {m.description ? <div style={{ fontSize: '7px', color: '#5c5c72', marginTop: 1 }}>{m.description}</div> : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {connected.length > 0 ? (
+        <div style={{ marginTop: 6, borderTop: '1px solid #1e1e2e', paddingTop: 6 }}>
+          <div style={{ fontSize: '9px', color: '#5c5c72', marginBottom: 3, fontWeight: 600 }}>{isZh ? '关系连线' : 'Connections'} ({connected.length})</div>
+          {connected.slice(0, 5).map((c: any, i: number) => (
+            <div key={i} style={{ fontSize: '8px', color: '#8b8ba0', display: 'flex', alignItems: 'center', gap: 4, padding: '1px 0' }}>
+              <span style={{ width: 8, height: 1, background: CONN_COLORS[c.type] || '#555', display: 'inline-block', flexShrink: 0 }} />
+              <span>{isZh ? c.otherNameZh : c.otherName}</span>
+              <span style={{ color: CONN_COLORS[c.type] || '#555' }}>· {isZh ? (CONN_LABELS[c.type]?.zh || c.type) : (CONN_LABELS[c.type]?.en || c.type)}</span>
+            </div>
+          ))}
+          {connected.length > 5 ? <div style={{ fontSize: '8px', color: '#5c5c72' }}>...+{connected.length - 5} {isZh ? '条更多' : 'more'}</div> : null}
+        </div>
+      ) : null}
+      {nearbySignals > 0 ? (
+        <div style={{ marginTop: 4, fontSize: '9px', color: '#f59e0b', borderTop: '1px solid #1e1e2e', paddingTop: 5 }}>
+          📍 {nearbySignals} {isZh ? '条附近信号' : 'nearby signals'}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 const CONN_COLORS: Record<string, string> = { compete: '#ff4444', partner: '#06b6d4', collab: '#a78bfa' }
 const CONN_LABELS: Record<string, { en: string; zh: string }> = {
   compete: { en: 'Competition', zh: '竞争' },
@@ -303,7 +358,6 @@ export default function DashboardMap({ locale, signals }: Props) {
         // Never let the wheel bubble to the page scroller: zoom stays on the map
         const onWheel = (e: WheelEvent) => {
           e.preventDefault()
-          e.stopPropagation()
         }
         container.addEventListener('wheel', onWheel, { passive: false })
         return () => container.removeEventListener('wheel', onWheel)
@@ -321,7 +375,7 @@ export default function DashboardMap({ locale, signals }: Props) {
 
   if (!MapComponents) {
     return (
-      <PanelBase id="map" title={locale === 'zh' ? '全球 AI 活动地图' : 'Global AI Activity Map'} dataBadge="live" collapsible className="h-full">
+      <PanelBase id="map" title={locale === 'zh' ? '全球 AI 活动地图' : 'Global AI Activity Map'} dataBadge="static" collapsible className="h-full">
         <div className="h-full min-h-0 flex items-center justify-center">
           <div className="panel-loading"><div className="panel-loading-radar"><div className="panel-radar-dot" /></div><div className="panel-loading-text">{locale === 'zh' ? '加载地图...' : 'Loading map...'}</div></div>
         </div>
@@ -347,7 +401,7 @@ export default function DashboardMap({ locale, signals }: Props) {
     <PanelBase
       id="map"
       title={locale === 'zh' ? '全球 AI 活动地图' : 'Global AI Activity Map'}
-      dataBadge="live"
+      dataBadge="static"
       collapsible
       className="h-full"
       headerExtra={
@@ -445,58 +499,30 @@ export default function DashboardMap({ locale, signals }: Props) {
             const typeLabel = (TYPE_LABELS[hub.type] || { en: hub.type, zh: hub.type })
             const typeDisplay = isZh ? typeLabel.zh : typeLabel.en
 
-            const detailHtml = `
-              <div style="font-size:11px;color:#e5e5e5;line-height:1.5;min-width:240px;max-width:320px">
-                <div style="font-weight:600;font-size:14px;margin-bottom:2px">${displayName}</div>
-                <div style="color:#5c5c72;margin-bottom:6px;font-size:10px">${displayCity}, ${hub.country}</div>
-                <div style="display:flex;gap:4px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
-                   <span style="font-size:8px;padding:2px 8px;border-radius:3px;background:${color}20;color:${color};border:1px solid ${color}40">${typeDisplay}</span>
-                  <span style="font-size:9px;color:#8b8ba0">${isZh ? '重要度' : 'Importance'}: ${'●'.repeat(hub.importance)}${'○'.repeat(5 - hub.importance)}</span>
-                </div>
-                ${hub.description ? `<div style="font-size:10px;color:#8b8ba0;margin-bottom:8px;padding:6px 8px;background:#0c0c14;border-radius:4px">📋 ${hub.description}</div>` : ''}
-                ${hub.models.length > 0 ? `
-                  <div style="margin-top:4px;border-top:1px solid #1e1e2e;padding-top:6px">
-                    <div style="font-size:9px;color:#5c5c72;margin-bottom:4px;font-weight:600">${isZh ? '旗下模型' : 'Models'} (${hub.models.length})</div>
-                    ${hub.models.map((m: any) => `
-                      <div style="font-size:9px;padding:3px 0;border-bottom:1px solid #1e1e2e30">
-                        <div style="display:flex;align-items:center;gap:6px">
-                          <span style="color:#e5e5e5;font-weight:500">${m.name}</span>
-                          <span style="font-size:7px;color:#5c5c72">${m.version}</span>
-                          <span style="font-size:7px;color:#06b6d4;margin-left:auto">${m.releaseYear}</span>
-                        </div>
-                        ${m.description ? `<div style="font-size:7px;color:#5c5c72;margin-top:1px">${m.description}</div>` : ''}
-                      </div>
-                    `).join('')}
-                  </div>
-                ` : ''}
-                ${connected.length > 0 ? `
-                  <div style="margin-top:6px;border-top:1px solid #1e1e2e;padding-top:6px">
-                    <div style="font-size:9px;color:#5c5c72;margin-bottom:3px;font-weight:600">${isZh ? '关系连线' : 'Connections'} (${connected.length})</div>
-                    ${connected.slice(0, 5).map((c: any) => `
-                      <div style="font-size:8px;color:#8b8ba0;display:flex;align-items:center;gap:4px;padding:1px 0">
-                        <span style="width:8px;height:1px;background:${CONN_COLORS[c.type] || '#555'};display:inline-block;flex-shrink:0"></span>
-                        <span>${isZh ? c.otherNameZh : c.otherName}</span>
-                        <span style="color:${CONN_COLORS[c.type] || '#555'}">· ${isZh ? (CONN_LABELS[c.type]?.zh || c.type) : (CONN_LABELS[c.type]?.en || c.type)}</span>
-                      </div>
-                    `).join('')}
-                    ${connected.length > 5 ? `<div style="font-size:8px;color:#5c5c72">...+${connected.length - 5} ${isZh ? '条更多' : 'more'}</div>` : ''}
-                  </div>
-                ` : ''}
-                ${nearbySignals > 0 ? `
-                  <div style="margin-top:4px;font-size:9px;color:#f59e0b;border-top:1px solid #1e1e2e;padding-top:5px">📍 ${nearbySignals} ${isZh ? '条附近信号' : 'nearby signals'}</div>
-                ` : ''}
-              </div>
-            `
-
             return (
               <CircleMarker
                 key={hub.id}
                 center={[hub.lat, hub.lng]}
                 radius={size}
                 pathOptions={{ fillColor: color, fillOpacity: 0.75, color: color, weight: 1.5, opacity: 0.5 }}
+                eventHandlers={{
+                  click: (e: { target: { openPopup: () => void } }) => e.target.openPopup(),
+                }}
               >
                 <Popup>
-                  <div dangerouslySetInnerHTML={{ __html: detailHtml }} />
+                  <HubPopupContent
+                    displayName={displayName}
+                    displayCity={displayCity}
+                    country={hub.country}
+                    color={color}
+                    typeDisplay={typeDisplay}
+                    importance={hub.importance}
+                    description={hub.description}
+                    models={hub.models}
+                    connected={connected}
+                    nearbySignals={nearbySignals}
+                    isZh={isZh}
+                  />
                 </Popup>
                 <Tooltip direction="top" offset={[0, -size - 5]} opacity={0.9}>
                   <div style={{ fontSize: '10px' }}>
@@ -520,6 +546,9 @@ export default function DashboardMap({ locale, signals }: Props) {
               center={[loc.lat, loc.lng]}
               radius={5}
               pathOptions={{ fillColor: '#f59e0b', fillOpacity: 0.55, color: '#f59e0b', weight: 2, opacity: 0.7 }}
+              eventHandlers={{
+                click: (e: { target: { openPopup: () => void } }) => e.target.openPopup(),
+              }}
             >
               <Popup>
                 <div className="text-xs max-w-52" style={{ color: '#e5e5e5', lineHeight: 1.4 }}>

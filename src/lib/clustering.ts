@@ -16,7 +16,41 @@ export interface ClusteredSignal {
   clusterItems: Omit<Signal, 'id'>[]
 }
 
+function hasChinese(text: string): boolean {
+  return /[\u4e00-\u9fff\u3400-\u4dbf]/.test(text)
+}
+
+function chineseBigramSimilarity(a: string, b: string): number {
+  const charsA = a.replace(/[^\u4e00-\u9fff\u3400-\u4dbf]/g, '')
+  const charsB = b.replace(/[^\u4e00-\u9fff\u3400-\u4dbf]/g, '')
+  if (!charsA || !charsB) return 0
+
+  const bigramsA = new Set<string>()
+  for (let i = 0; i < charsA.length - 1; i++) {
+    bigramsA.add(charsA.slice(i, i + 2))
+  }
+
+  const bigramsB = new Set<string>()
+  for (let i = 0; i < charsB.length - 1; i++) {
+    bigramsB.add(charsB.slice(i, i + 2))
+  }
+
+  if (bigramsA.size === 0 || bigramsB.size === 0) return 0
+
+  let common = 0
+  for (const bg of bigramsA) {
+    if (bigramsB.has(bg)) common++
+  }
+
+  const union = new Set([...bigramsA, ...bigramsB])
+  return common / union.size
+}
+
 function titleSimilarity(a: string, b: string): number {
+  if (hasChinese(a) || hasChinese(b)) {
+    return chineseBigramSimilarity(a, b)
+  }
+
   const wordsA = a.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2)
   const wordsB = b.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2)
   if (wordsA.length === 0 || wordsB.length === 0) return 0
@@ -34,6 +68,11 @@ function titleSimilarity(a: string, b: string): number {
   return common / unionSet.size
 }
 
+function similarityThreshold(a: string, b: string): number {
+  if (hasChinese(a) || hasChinese(b)) return 0.25
+  return 0.35
+}
+
 export function clusterSignals(signals: Signal[]): (Signal | ClusteredSignal)[] {
   if (signals.length < 3) return signals
 
@@ -47,7 +86,7 @@ export function clusterSignals(signals: Signal[]): (Signal | ClusteredSignal)[] 
 
     for (let j = i + 1; j < signals.length; j++) {
       if (visited.has(j)) continue
-      if (titleSimilarity(signals[i].title, signals[j].title) >= 0.35) {
+      if (titleSimilarity(signals[i].title, signals[j].title) >= similarityThreshold(signals[i].title, signals[j].title)) {
         cluster.push(j)
         visited.add(j)
       }

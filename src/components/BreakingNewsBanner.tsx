@@ -31,7 +31,7 @@ export default function BreakingNewsBanner({ signals, locale }: { signals: Signa
         <a
           href={item.sourceUrl}
           target="_blank"
-          rel="noopener"
+          rel="noopener noreferrer"
           className="text-xs truncate hover:underline"
         >
           {item.title}

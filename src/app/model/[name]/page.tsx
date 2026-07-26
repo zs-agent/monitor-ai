@@ -61,7 +61,7 @@ export default function ModelDetailPage() {
               <h1 className="text-lg font-bold text-[#e5e5e5]">{model.model}</h1>
               <p className="text-sm text-[#06b6d4] mt-1">{model.organization}</p>
             </div>
-            <a href={model.url} target="_blank" rel="noopener" className="text-[10px] px-3 py-1.5 rounded-lg bg-[#06b6d4]/10 text-[#06b6d4] border border-[#06b6d4]/20 hover:bg-[#06b6d4]/20 transition-colors">
+            <a href={model.url} target="_blank" rel="noopener noreferrer" className="text-[10px] px-3 py-1.5 rounded-lg bg-[#06b6d4]/10 text-[#06b6d4] border border-[#06b6d4]/20 hover:bg-[#06b6d4]/20 transition-colors">
               {locale === 'zh' ? '官网 →' : 'Website →'}
             </a>
           </div>

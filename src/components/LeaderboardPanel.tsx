@@ -48,7 +48,7 @@ export default function LeaderboardPanel({ locale }: { locale: Locale }) {
     <PanelBase
       id="leaderboard"
       title={locale === 'zh' ? '大模型排行' : 'LLM Leaderboard'}
-      dataBadge="live"
+      dataBadge="static"
       dataBadgeDetail={BENCHMARK_LATEST}
       collapsible
     >
@@ -82,9 +82,15 @@ export default function LeaderboardPanel({ locale }: { locale: Locale }) {
               <th className="text-left py-1.5 font-normal hidden sm:table-cell">{locale === 'zh' ? '机构' : 'Org'}</th>
               <th className="text-right py-1.5 font-normal px-2">Arena</th>
               {view === 'cn' && (
-                <th className="text-right py-1.5 font-normal px-2 hidden md:table-cell">SCLUE</th>
+                <>
+                  <th className="text-right py-1.5 font-normal px-2 hidden md:table-cell">SCLUE</th>
+                  <th className="text-right py-1.5 font-normal px-2 hidden md:table-cell">C-Eval</th>
+                </>
               )}
-              <th className="text-right py-1.5 font-normal px-2 hidden md:table-cell">MMLU</th>
+              {view === 'intl' && (() => {
+                const hasAnySCLUE = data.some(d => d.superClue !== null)
+                return hasAnySCLUE ? <th className="text-right py-1.5 font-normal px-2 hidden md:table-cell">SCLUE</th> : null
+              })()}
             </tr>
           </thead>
           <tbody>
@@ -106,17 +112,26 @@ export default function LeaderboardPanel({ locale }: { locale: Locale }) {
                   <div className="sm:hidden text-[9px] text-[#5c5c72]">{entry.organization} · {entry.params}</div>
                 </td>
                 <td className="py-1.5 text-[#5c5c72] hidden sm:table-cell">{entry.organization}</td>
-                <td className="py-1.5 px-2">
-                  <ScoreBar value={entry.arenaScore} max={maxArena} />
+                <td className="py-1.5 px-2 text-right">
+                  <div className="inline-flex">
+                    <ScoreBar value={entry.arenaScore} max={maxArena} />
+                  </div>
                 </td>
                 {view === 'cn' && (
-                  <td className="py-1.5 px-2 hidden md:table-cell">
-                    <ScoreBar value={entry.superClue} max={100} />
+                  <>
+                    <td className="py-1.5 px-2 text-right hidden md:table-cell">
+                      <div className="inline-flex"><ScoreBar value={entry.superClue} max={100} /></div>
+                    </td>
+                    <td className="py-1.5 px-2 text-right hidden md:table-cell">
+                      <div className="inline-flex"><ScoreBar value={entry.cEval} max={100} /></div>
+                    </td>
+                  </>
+                )}
+                {view === 'intl' && entry.superClue !== null && (
+                  <td className="py-1.5 px-2 text-right hidden md:table-cell">
+                    <div className="inline-flex"><ScoreBar value={entry.superClue} max={100} /></div>
                   </td>
                 )}
-                <td className="py-1.5 px-2 hidden md:table-cell">
-                  <ScoreBar value={entry.mmlu} max={100} />
-                </td>
               </tr>
             ))}
           </tbody>

@@ -128,7 +128,7 @@ export default function MonitorPanel({ signals, locale }: { signals: Signal[]; l
                   <a
                     href={signal.sourceUrl}
                     target="_blank"
-                    rel="noopener"
+                    rel="noopener noreferrer"
                     className="text-[#e5e5e5] hover:text-[#06b6d4] transition-colors line-clamp-1"
                   >
                     {signal.title}

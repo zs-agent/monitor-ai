@@ -3,7 +3,7 @@
   "provider": {
     "anthropic": {
       "options": {
-        "apiKey": "sk-ZVENx1zh3FQVAJeTM6xzLCYfzqslykV0ytUTUE8GgEVxe9e5",
+        "apiKey": "YOUR_ANTHROPIC_API_KEY",
         "baseURL": "https://4sapi.com/v1",
         "timeout": 300000
       },
@@ -15,7 +15,7 @@
     },
     "openai": {
       "options": {
-        "apiKey": "sk-vKiQzp1OssHflMHKBLnmsqxXsJlsOeNaZdJ3ItOWmpCgDsf3",
+        "apiKey": "YOUR_OPENAI_API_KEY",
         "baseURL": "https://4sapi.com/v1",
         "timeout": 300000
       },

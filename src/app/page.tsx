@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, Suspense } from 'react'
+import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import SignalCard from '@/components/SignalCard'
 import ComparisonPanel from '@/components/ComparisonPanel'
 import AIMarketInsightPanel from '@/components/AIMarketInsightPanel'
@@ -21,6 +22,7 @@ import FloatingChat from '@/components/FloatingChat'
 import SignalDetailModal from '@/components/SignalDetailModal'
 import VirtualSignalList from '@/components/VirtualSignalList'
 import { usePolling } from '@/lib/use-polling'
+import ErrorBoundary from '@/components/ErrorBoundary'
 
 const CATEGORIES = [
   { key: 'all', label: 'All' },
@@ -32,11 +34,16 @@ const CATEGORIES = [
 ] as const
 type Category = (typeof CATEGORIES)[number]['key']
 
-export default function Home() {
+function DashboardContent() {
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
+
   const [locale, setLocaleState] = useState<Locale>('en')
-  const [activeCategory, setActiveCategory] = useState<Category>('all')
-  const [loading, setLoading] = useState(true)
-  const [timeRange, setTimeRange] = useState('24h')
+  const [activeCategory, setActiveCategory] = useState<Category>(
+    (searchParams.get('category') as Category) || 'all'
+  )
+  const [timeRange, setTimeRange] = useState(searchParams.get('time') || '24h')
   const [selectedSignal, setSelectedSignal] = useState<Signal | ClusteredSignal | null>(null)
 
   const API_BASE = process.env.NEXT_PUBLIC_API_URL || ''
@@ -47,7 +54,8 @@ export default function Home() {
     sourceHealth: Record<string, string>
     freshness?: DataFreshnessSummary
   }>(() =>
-    fetch(`${API_BASE}/api/signals?locale=${locale}&category=${activeCategory}`).then(r => {
+    // Always fetch all categories from server; client-side filteredSignals handles category+time filtering
+    fetch(`${API_BASE}/api/signals?locale=${locale}&category=all`).then(r => {
       if (!r.ok) throw new Error('API error')
       return r.json()
     }),
@@ -56,9 +64,16 @@ export default function Home() {
 
   useEffect(() => {
     setLocaleState(getLocale())
-    const timer = setTimeout(() => setLoading(false), 600)
-    return () => clearTimeout(timer)
   }, [])
+
+  // Sync category and timeRange to URL search params
+  useEffect(() => {
+    const params = new URLSearchParams()
+    if (activeCategory !== 'all') params.set('category', activeCategory)
+    if (timeRange !== '24h') params.set('time', timeRange)
+    const qs = params.toString()
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+  }, [activeCategory, timeRange, router, pathname])
 
   const handleLocaleChange = useCallback((newLocale: Locale) => {
     setLocaleState(newLocale)
@@ -102,13 +117,12 @@ export default function Home() {
 
   const sourceHealth = useMemo(() => apiData?.sourceHealth || {}, [apiData?.sourceHealth])
   const signalCounts = useMemo(() => ({
-    total: signals.length,
-    high: signals.filter(s => s.importance >= 4).length,
-    sources: signals.reduce((sum, s) => sum + s.sourcesCount, 0),
-    sourceHealth,
-  }), [signals, sourceHealth])
+    total: filteredSignals.length,
+    high: filteredSignals.filter(s => s.importance >= 4).length,
+    sources: filteredSignals.reduce((sum, s) => sum + s.sourcesCount, 0),
+  }), [filteredSignals])
 
-  const isLoading = loading || apiLoading
+  const isLoading = apiLoading && !apiData
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] flex flex-col">
@@ -145,8 +159,8 @@ export default function Home() {
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-3 text-[11px]">
             <span className="flex items-center gap-1.5 text-[#5c5c72]">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#06b6d4] animate-pulse-slow" />
-              <span className="hidden sm:inline">LIVE</span>
+              <span className={`w-1.5 h-1.5 rounded-full ${apiData ? 'bg-[#06b6d4] animate-pulse-slow' : 'bg-[#5c5c72]'} `} />
+              <span className="hidden sm:inline">{apiData ? 'LIVE' : 'READING...'}</span>
             </span>
             <span className="text-[#8b8ba0] hidden sm:inline">
               {signalCounts.total} <span className="text-[#5c5c72]">{locale === 'zh' ? '信号' : 'signals'}</span>
@@ -163,39 +177,39 @@ export default function Home() {
       </nav>
 
       {/* Breaking News */}
-      <BreakingNewsBanner signals={signals} locale={locale} />
+      <BreakingNewsBanner signals={filteredSignals} locale={locale} />
 
       {/* === Main Content === */}
       <main className="flex-1 overflow-y-auto p-3 sm:p-4 main-content">
         {/* Row 1: Map (6) + AI Market Insight (4) — fixed height so the map is large enough */}
-        <div className="grid grid-cols-1 lg:grid-cols-[6fr_4fr] gap-3 mb-3 lg:h-[560px]">
-          <DashboardMap locale={locale} signals={signals} />
+        <div className="grid grid-cols-1 lg:grid-cols-[6fr_4fr] gap-3 mb-3 lg:h-[400px]">
+          <DashboardMap locale={locale} signals={filteredSignals} />
           <AIMarketInsightPanel locale={locale} signals={signals} />
         </div>
 
-        {/* Row 2: Leaderboard (wide) | NewsTimeline (narrow, bottom-aligned with leaderboard) */}
-        <div className="grid grid-cols-1 lg:grid-cols-[7fr_5fr] gap-3 mb-3 lg:items-stretch">
+        {/* Row 2: Leaderboard — aligned with Map above; Timeline — aligned with Market above */}
+        <div className="grid grid-cols-1 lg:grid-cols-[6fr_4fr] gap-3 mb-3 lg:items-stretch">
           <LeaderboardPanel locale={locale} />
-          <div className="flex flex-col min-h-0">
-            <NewsTimeline locale={locale} signals={signals} onSignalClick={setSelectedSignal} />
+          <div className="flex flex-col min-h-0" style={{ maxHeight: '440px' }}>
+            <NewsTimeline locale={locale} signals={filteredSignals} onSignalClick={setSelectedSignal} />
           </div>
         </div>
 
         {/* Row 3: US vs China AI Comparison (merged with trend chart) */}
         <div className="mb-3">
-          <ComparisonPanel locale={locale} signals={signals} />
+          <ComparisonPanel locale={locale} signals={filteredSignals} />
         </div>
 
         {/* Row 4: Vendor Radar + Keyword Monitor */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-          <CompanyRadar locale={locale} signals={signals} />
-          <MonitorPanel signals={signals} locale={locale} />
+          <CompanyRadar locale={locale} signals={filteredSignals} />
+          <MonitorPanel signals={filteredSignals} locale={locale} />
         </div>
 
         {/* Section header */}
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#5c5c72]">
-            {tFunc(`filter.${activeCategory}`)} · {locale === 'zh' ? '信号流' : 'Signal Stream'}
+            {tFunc(`filter.${activeCategory}`)} · {filteredSignals.length} / {signals.length} signals
           </h2>
           <div className="flex items-center gap-3">
             <TimeRangeFilter locale={locale} active={timeRange} onChange={setTimeRange} />
@@ -250,16 +264,28 @@ export default function Home() {
           <span>{filteredSignals.length} {locale === 'zh' ? '条信号' : 'signals'}</span>
           <span className="w-1 h-1 rounded-full bg-[#1e1e2e]" />
           <span>{
-            Object.entries(sourceHealth).map(([k, v]) => `${k}:${v}`).join(' | ')
+            Object.values(sourceHealth).every(v => v === 'ok') 
+              ? (locale === 'zh' ? '所有数据源正常' : 'All sources connected')
+              : (locale === 'zh' ? '部分数据源异常' : 'Some sources offline')
           }</span>
           <span className="w-1 h-1 rounded-full bg-[#1e1e2e]" />
           <span suppressHydrationWarning>{new Date().toISOString().slice(0, 16).replace('T', ' ')}Z</span>
         </span>
       </footer>
       {/* Floating Chat */}
-      <FloatingChat signals={signals} locale={locale} />
+      <FloatingChat signals={filteredSignals} locale={locale} />
       {/* Signal Detail Modal */}
       <SignalDetailModal signal={selectedSignal} locale={locale} onClose={() => setSelectedSignal(null)} />
     </div>
+  )
+}
+
+export default function Home() {
+  return (
+    <ErrorBoundary>
+      <Suspense fallback={<div className="min-h-screen bg-[#0a0a0f]" />}>
+        <DashboardContent />
+      </Suspense>
+    </ErrorBoundary>
   )
 }

@@ -42,6 +42,11 @@ export default function SignalDetailModal({ signal, locale, onClose }: { signal:
             <div className="bg-[#0c0c14] rounded-lg p-3">
               <div className="text-[#5c5c72] mb-0.5">{locale === 'zh' ? '信源' : 'Source'}</div>
               <div className="text-[#e5e5e5]">{signal.source}</div>
+              {'sourceUrl' in signal && signal.sourceUrl && (
+                <a href={signal.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-[#06b6d4] underline mt-1 block text-[10px] truncate">
+                  {signal.sourceUrl}
+                </a>
+              )}
             </div>
             <div className="bg-[#0c0c14] rounded-lg p-3">
               <div className="text-[#5c5c72] mb-0.5">{locale === 'zh' ? '时间' : 'Time'}</div>
@@ -65,9 +70,29 @@ export default function SignalDetailModal({ signal, locale, onClose }: { signal:
                  {('tags' in signal ? signal.tags : []).map(function(tag, i) {
                    return <span key={i} className="px-1.5 py-0.5 text-[9px] rounded bg-[#06b6d4]/10 text-[#06b6d4] border border-[#06b6d4]/20">{tag}</span>
                  })}
+              </div>
+           </div>
+
+           {/* Cluster items - show individual sources */}
+           {'isCluster' in signal && signal.isCluster && signal.clusterItems && (
+             <div className="bg-[#0c0c14] rounded-lg p-3 mt-2">
+               <div className="text-[10px] text-[#5c5c72] mb-1.5 font-semibold uppercase tracking-[0.08em]">
+                 {locale === 'zh' ? '聚合来源' : 'Cluster Sources'} ({signal.clusterItems.length})
+               </div>
+               <div className="space-y-1 max-h-32 overflow-y-auto">
+                 {signal.clusterItems.map((item, i) => (
+                   <div key={i} className="flex items-start gap-2 text-[10px] py-0.5 border-b border-[#1e1e2e]/30 last:border-0">
+                     <span className="w-1 h-1 mt-1 rounded-full bg-[#06b6d4]/50 shrink-0" />
+                     <div className="flex-1 min-w-0">
+                       <div className="text-[#e5e5e5] truncate">{item.title}</div>
+                       <div className="text-[#5c5c72] text-[9px]">{item.source} · {(item as any).importance}/5</div>
+                     </div>
+                   </div>
+                 ))}
                </div>
              </div>
-          </div>
+           )}
+         </div>
         </div>
 
         <div className="px-5 py-3 border-t border-[#1e1e2e] flex items-center justify-between">
@@ -75,7 +100,7 @@ export default function SignalDetailModal({ signal, locale, onClose }: { signal:
           <a
             href={signal.sourceUrl}
             target="_blank"
-            rel="noopener"
+            rel="noopener noreferrer"
             className="text-[10px] px-3 py-1.5 rounded-lg bg-[#06b6d4]/10 text-[#06b6d4] border border-[#06b6d4]/20 hover:bg-[#06b6d4]/20 transition-colors"
           >
             {locale === 'zh' ? '查看原文 →' : 'View Source →'}

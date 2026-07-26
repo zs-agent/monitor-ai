@@ -6,5 +6,130 @@
   "lang": { "switch": "中" },
   "loading": "Loading...",
   "error": "Failed to load. Retry.",
-  "noSignals": "No signals yet"
+  "noSignals": "No signals yet",
+  "panel": {
+    "live": "LIVE",
+    "cached": "CACHED",
+    "static": "REF",
+    "unavailable": "OFFLINE",
+    "retry": "Retry",
+    "retrying": "Retrying ({seconds}s)",
+    "expand": "Expand",
+    "collapse": "Collapse"
+  },
+  "map": {
+    "title": "Global AI Activity Map",
+    "loading": "Loading map...",
+    "layers": "Layers",
+    "company": "Company",
+    "research": "Research",
+    "chip": "Chip/HW",
+    "datacenter": "Data Center",
+    "signal": "Signal",
+    "connections": "Connections",
+    "signals_nearby": "{count} nearby signals",
+    "models": "Models",
+    "connections_title": "Connections",
+    "visible_hubs": "{count} visible hubs",
+    "connections_count": "{count} connections",
+    "importance": "Importance"
+  },
+  "market": {
+    "title": "AI Market Insight",
+    "sector_all": "All",
+    "sector_chip": "Chip",
+    "sector_cloud": "Cloud",
+    "sector_infra": "Infra",
+    "events_title": "AI Events · Market Impact",
+    "infra_title": "AI Infrastructure",
+    "total_gpus": "Total GPUs",
+    "total_power": "Total Power",
+    "disclaimer": "Reference data (not real-time)"
+  },
+  "leaderboard": {
+    "title": "LLM Leaderboard",
+    "global": "Global",
+    "china": "China",
+    "model": "Model",
+    "org": "Org",
+    "arena": "Arena",
+    "source": "Source",
+    "models_count": "{count} models"
+  },
+  "comparison": {
+    "title": "US vs China AI",
+    "us": "United States",
+    "cn": "China",
+    "lead": "LEAD",
+    "chase": "CHASE",
+    "signals_this_week": "{count} signals this week",
+    "models_dim": "Models",
+    "funding_dim": "Funding",
+    "patents_dim": "Patents",
+    "talent_dim": "Talent",
+    "infra_dim": "Infra",
+    "opensrc_dim": "OpenSrc",
+    "top_us": "OpenAI, Anthropic, Meta, xAI",
+    "top_cn": "DeepSeek, Alibaba, Tencent, Zhipu",
+    "qoq_us": "+17%",
+    "qoq_cn": "+14%",
+    "us_growth": "US 1.5yr Growth",
+    "cn_growth": "CN 1.5yr Growth",
+    "disclaimer": "Estimates based on public data"
+  },
+  "timeline": {
+    "title": "AI News Timeline",
+    "no_news": "No news yet",
+    "auto_scrolling": "Auto-scrolling",
+    "paused": "Paused"
+  },
+  "radar": {
+    "title": "Vendor Radar",
+    "empty": "No vendor signals",
+    "ranked_by": "Ranked by mentions",
+    "rising_12h": "12h rising"
+  },
+  "monitor": {
+    "title": "Keyword Monitor",
+    "placeholder": "Keywords, comma-separated...",
+    "add": "Add",
+    "no_matches": "No matching signals",
+    "trending": "Trending keywords · click to add"
+  },
+  "chat": {
+    "title": "AI Analyst",
+    "placeholder": "Ask...",
+    "empty": "Ask me about the current AI landscape...",
+    "no_data": "No data yet",
+    "no_trending": "No trending items",
+    "response_template": "Got it. {count} signals. Sources: {sources}",
+    "disclaimer": "This is a rule-based assistant using current signal data"
+  },
+  "detail": {
+    "title": "Signal Detail",
+    "source": "Source",
+    "time": "Time",
+    "category": "Category",
+    "importance": "Importance",
+    "tags": "Tags",
+    "view_source": "View Source →",
+    "sources_count": "{count} sources"
+  },
+  "status": {
+    "signals": "signals",
+    "high": "high",
+    "sources": "sources",
+    "signals_count_zh": "{count} 条信号",
+    "signal_stream": "Signal Stream"
+  },
+  "breaking": {
+    "label": "BREAKING",
+    "label_zh": "突发"
+  },
+  "time": {
+    "24h": "24H",
+    "7d": "7D",
+    "30d": "30D",
+    "all": "ALL"
+  }
 }

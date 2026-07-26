@@ -62,7 +62,7 @@ export default function SignalCard({ signal, locale, onClick }: Props) {
               +{displaySourceCount - 1}
             </span>
           )}
-          {isHigh && !isCluster && (
+          {isHigh && (
             <span className="shrink-0 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider rounded bg-[#06b6d4]/10 text-[#06b6d4] border border-[#06b6d4]/15 animate-pulse-slow">
               {t('signal.new', locale)}
             </span>

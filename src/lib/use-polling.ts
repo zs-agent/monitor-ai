@@ -9,6 +9,8 @@ export interface ApiResponse<T> {
   refetch: () => void
 }
 
+const MAX_BACKOFF_MS = 5 * 60 * 1000
+
 export function usePolling<T>(
   fetcher: () => Promise<T>,
   intervalMs: number = 60000
@@ -18,7 +20,31 @@ export function usePolling<T>(
   const [error, setError] = useState<Error | null>(null)
   const mountedRef = useRef(true)
   const fetcherRef = useRef(fetcher)
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const currentIntervalRef = useRef(intervalMs)
+  const originalIntervalRef = useRef(intervalMs)
   fetcherRef.current = fetcher
+
+  const scheduleNext = useCallback(() => {
+    timeoutRef.current = setTimeout(async () => {
+      if (!mountedRef.current) return
+      try {
+        const result = await fetcherRef.current()
+        if (mountedRef.current) {
+          setData(result)
+          setError(null)
+          currentIntervalRef.current = originalIntervalRef.current
+        }
+      } catch (e) {
+        if (mountedRef.current) setError(e as Error)
+        currentIntervalRef.current = Math.min(
+          currentIntervalRef.current * 2,
+          MAX_BACKOFF_MS
+        )
+      }
+      if (mountedRef.current) scheduleNext()
+    }, currentIntervalRef.current)
+  }, [])
 
   const fetchData = useCallback(async () => {
     try {
@@ -26,6 +52,7 @@ export function usePolling<T>(
       if (mountedRef.current) {
         setData(result)
         setError(null)
+        currentIntervalRef.current = originalIntervalRef.current
       }
     } catch (e) {
       if (mountedRef.current) setError(e as Error)
@@ -37,12 +64,24 @@ export function usePolling<T>(
   useEffect(() => {
     mountedRef.current = true
     fetchData()
-    const interval = setInterval(fetchData, intervalMs)
+    scheduleNext()
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        scheduleNext()
+      } else if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+        timeoutRef.current = null
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
     return () => {
       mountedRef.current = false
-      clearInterval(interval)
+      if (timeoutRef.current) clearTimeout(timeoutRef.current)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [fetchData, intervalMs])
+  }, [fetchData, scheduleNext])
 
   return { data, loading, error, refetch: fetchData }
 }

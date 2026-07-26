@@ -184,6 +184,10 @@ body {
   background: rgba(255, 68, 68, 0.12);
   color: #ff4444;
 }
+.panel-data-badge.static {
+  background: rgba(255, 204, 0, 0.08);
+  color: #ffcc00;
+}
 
 /* Freshness badge */
 .panel-freshness-badge {
@@ -348,7 +352,21 @@ body {
 ::-webkit-scrollbar-thumb { background: var(--text-muted); border-radius: 2px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
 
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--text-muted) transparent;
+}
+
 /* Smooth scroll for main area */
 .overflow-y-auto {
   scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

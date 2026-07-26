@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { type Locale } from '@/lib/i18n'
 import type { Signal } from '@/types/signal'
 import PanelBase from './PanelBase'
@@ -30,6 +30,7 @@ const HALF_DAY = 43200000
 
 export default function CompanyRadar({ locale, signals }: Props) {
   const isZh = locale === 'zh'
+  const [showAllVendors, setShowAllVendors] = useState(false)
 
   const rows = useMemo(() => {
     const now = Date.now()
@@ -59,7 +60,7 @@ export default function CompanyRadar({ locale, signals }: Props) {
     return stats
       .filter(s => s.total > 0)
       .sort((a, b) => b.total - a.total || b.peakImportance - a.peakImportance)
-      .slice(0, 8)
+      .slice(0, showAllVendors ? undefined : 8)
   }, [signals])
 
   const max = rows.length > 0 ? Math.max(...rows.map(r => r.total)) : 0
@@ -69,7 +70,7 @@ export default function CompanyRadar({ locale, signals }: Props) {
       id="company-radar"
       title={isZh ? '厂商动向雷达' : 'Vendor Radar'}
       severity="medium"
-      dataBadge="live"
+      dataBadge="static"
       count={rows.length}
       collapsible
     >
@@ -82,6 +83,18 @@ export default function CompanyRadar({ locale, signals }: Props) {
         </div>
       ) : (
         <div className="space-y-1.5">
+          {rows.length > 0 && VENDORS.length > 8 && (
+            <div className="flex justify-end">
+              <button
+                onClick={() => setShowAllVendors(!showAllVendors)}
+                className="text-[10px] text-[#06b6d4]/60 hover:text-[#06b6d4] transition-colors"
+              >
+                {showAllVendors
+                  ? (isZh ? '收起' : 'Show less')
+                  : (isZh ? `查看全部 ${VENDORS.length} 家厂商 →` : `View all ${VENDORS.length} vendors →`)}
+              </button>
+            </div>
+          )}
           {rows.map((r, i) => {
             const pct = max > 0 ? (r.total / max) * 100 : 0
             const trendUp = r.delta > 0
