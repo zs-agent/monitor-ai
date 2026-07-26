@@ -14,7 +14,6 @@ import type { DataFreshnessSummary } from '@/lib/data-freshness'
 import { persistBootstrap } from '@/lib/bootstrap'
 import { clusterSignals, type ClusteredSignal } from '@/lib/clustering'
 import LocaleSwitcher from '@/components/LocaleSwitcher'
-import TrendingPanel from '@/components/TrendingPanel'
 import CompanyRadar from '@/components/CompanyRadar'
 import TimeRangeFilter from '@/components/TimeRangeFilter'
 import BreakingNewsBanner from '@/components/BreakingNewsBanner'
@@ -175,11 +174,10 @@ export default function Home() {
           <AIMarketInsightPanel locale={locale} signals={signals} />
         </div>
 
-        {/* Row 2: Leaderboard (wide) | Trending + News (narrow, bottom-aligned with leaderboard) */}
+        {/* Row 2: Leaderboard (wide) | NewsTimeline (narrow, bottom-aligned with leaderboard) */}
         <div className="grid grid-cols-1 lg:grid-cols-[7fr_5fr] gap-3 mb-3 lg:items-stretch">
           <LeaderboardPanel locale={locale} />
-          <div className="flex flex-col gap-3 min-h-0">
-            <TrendingPanel locale={locale} signals={signals} />
+          <div className="flex flex-col min-h-0">
             <NewsTimeline locale={locale} signals={signals} onSignalClick={setSelectedSignal} />
           </div>
         </div>

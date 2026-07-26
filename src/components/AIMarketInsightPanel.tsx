@@ -80,20 +80,27 @@ function EventImpactFeed({ locale }: { locale: Locale }) {
                 {event.impact === 'positive' ? '▲' : event.impact === 'negative' ? '▼' : '◆'}
               </span>
               <div className="flex-1 min-w-0">
-                <div className="text-[12px] text-[#e5e5e5] leading-snug line-clamp-2">
-                  {locale === 'zh' ? event.titleZh : event.title}
-                </div>
-                {isExpanded && (
-                  <div className="mt-1 text-[11px] text-[#8b8ba0] leading-relaxed">
-                    {locale === 'zh' ? event.summaryZh : event.summary}
+                <div className="flex items-start gap-1">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[12px] text-[#e5e5e5] leading-snug line-clamp-2">
+                      {locale === 'zh' ? event.titleZh : event.title}
+                    </div>
+                    {isExpanded && (
+                      <div className="mt-1 text-[11px] text-[#8b8ba0] leading-relaxed">
+                        {locale === 'zh' ? event.summaryZh : event.summary}
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className={`text-[10px] font-semibold ${impactColor}`}>{impactLabel}</span>
+                      <span className="text-[9px] text-[#5c5c72]">·</span>
+                      <span className="text-[10px] text-[#5c5c72]">{event.affectedStocks.join(', ')}</span>
+                      <span className="text-[9px] text-[#5c5c72]">·</span>
+                      <span className="text-[10px] text-[#5c5c72]">{event.source}</span>
+                    </div>
                   </div>
-                )}
-                <div className="flex items-center gap-2 mt-1">
-                  <span className={`text-[10px] font-semibold ${impactColor}`}>{impactLabel}</span>
-                  <span className="text-[9px] text-[#5c5c72]">·</span>
-                  <span className="text-[10px] text-[#5c5c72]">{event.affectedStocks.join(', ')}</span>
-                  <span className="text-[9px] text-[#5c5c72]">·</span>
-                  <span className="text-[10px] text-[#5c5c72]">{event.source}</span>
+                  <span className="shrink-0 px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded bg-[#f59e0b]/10 text-[#f59e0b] border border-[#f59e0b]/20">
+                    HOT
+                  </span>
                 </div>
               </div>
             </div>
