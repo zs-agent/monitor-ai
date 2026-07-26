@@ -135,7 +135,7 @@ function InfraMini({ locale }: { locale: Locale }) {
           <div key={item.id} className="flex items-center gap-2 text-[11px] py-0.5">
             <span className={`w-1 h-1 rounded-full shrink-0 ${item.status === 'operational' ? 'bg-emerald-400' : item.status === 'building' ? 'bg-amber-400' : 'bg-[#5c5c72]'}`} />
             <span className="text-[11px] text-[#8b8ba0] truncate flex-1">{locale === 'zh' ? item.nameZh : item.name}</span>
-            <span className="text-[11px] text-[#5c5c72]">{locale === 'zh' ? item.locationZh : item.location}</span>
+            <span className="text-[11px] text-emerald-400">{locale === 'zh' ? item.locationZh : item.location}</span>
           </div>
         ))}
       </div>
