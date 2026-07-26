@@ -73,7 +73,7 @@ export default function LeaderboardPanel({ locale }: { locale: Locale }) {
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: '420px' }}>
+      <div className="overflow-x-auto overflow-y-auto flex-1 min-h-0">
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-[#1e1e2e] text-[#5c5c72]" style={{ position: 'sticky', top: 0, zIndex: 1, background: '#12121a' }}>

@@ -189,8 +189,10 @@ function DashboardContent() {
 
         {/* Row 2: Leaderboard — aligned with Map above; Timeline — aligned with Market above */}
         <div className="grid grid-cols-1 lg:grid-cols-[6fr_4fr] gap-3 mb-3 lg:items-stretch">
-          <LeaderboardPanel locale={locale} />
-          <div className="flex flex-col min-h-0" style={{ maxHeight: '440px' }}>
+          <div className="flex flex-col min-h-0 overflow-hidden" style={{ maxHeight: '440px' }}>
+            <LeaderboardPanel locale={locale} />
+          </div>
+          <div className="flex flex-col min-h-0 overflow-hidden" style={{ maxHeight: '440px' }}>
             <NewsTimeline locale={locale} signals={filteredSignals} onSignalClick={setSelectedSignal} />
           </div>
         </div>
