@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev --port 3000",
     "build": "next build",
+    "postbuild": "node -e \"var fs=require('fs');['vendor-chunks'].forEach(function(d){var s='.next/server/'+d,t='.next/standalone/.next/server/'+d;if(fs.existsSync(s))fs.cpSync(s,t,{recursive:true,force:true})});var s='.next/static',t='.next/standalone/.next/static';if(fs.existsSync(s))fs.cpSync(s,t,{recursive:true,force:true});\"",
     "start": "next start",
     "start:prod": "node .next/standalone/server.js",
     "lint": "next lint"
