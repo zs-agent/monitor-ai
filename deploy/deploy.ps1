@@ -2,11 +2,13 @@
 # Run: powershell -ExecutionPolicy Bypass .\deploy\deploy.ps1
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-$SERVER = "root@101.37.84.238"
+$SERVER_IP = $env:MONITOR_AI_SERVER_IP
+if (-not $SERVER_IP) { $SERVER_IP = Read-Host "请输入服务器 IP" }
+$SERVER = "root@$SERVER_IP"
 
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "  monitor-ai Deploy Tool" -ForegroundColor Cyan
-Write-Host "  monitor-ai.vip -> 101.37.84.238" -ForegroundColor Cyan
+Write-Host "  monitor-ai.vip -> $SERVER_IP" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -41,5 +43,5 @@ Write-Host "  Script finished!" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "Remaining: Add DNS A records in Aliyun console:" -ForegroundColor Yellow
-Write-Host "  monitor-ai.vip -> 101.37.84.238" -ForegroundColor White
-Write-Host "  www.monitor-ai.vip -> 101.37.84.238" -ForegroundColor White
+Write-Host "  monitor-ai.vip -> $SERVER_IP" -ForegroundColor White
+Write-Host "  www.monitor-ai.vip -> $SERVER_IP" -ForegroundColor White

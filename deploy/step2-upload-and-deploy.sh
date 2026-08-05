@@ -1,19 +1,24 @@
 #!/usr/bin/env bash
-# monitor-ai deploy to 101.37.84.238 (runs from WSL / Git Bash)
+# monitor-ai deploy (runs from WSL / Git Bash)
+# 密码通过环境变量 MONITOR_AI_SERVER_PASSWORD 注入（见本地机密备忘文件），
+# 未设置时 sshpass 不可用将回退为交互式输入。
 set -euo pipefail
 
-SERVER="root@101.37.84.238"
-PASSWORD="9neK2yU~r&st*&9"
+SERVER_IP="${MONITOR_AI_SERVER_IP:?请先设置 MONITOR_AI_SERVER_IP 环境变量（见本地机密备忘文件）}"
+SERVER="root@${SERVER_IP}"
+PASSWORD="${MONITOR_AI_SERVER_PASSWORD:-}"
 REMOTE_DIR="/opt/monitor-ai"
 PROJECT="D:\\monitor-ai"
 
 echo "========================================"
-echo " monitor-ai Deploy to 101.37.84.238"
+echo " monitor-ai Deploy to ${SERVER_IP}"
 echo "========================================"
 
 # Check sshpass
 HAS_PASS=n
-command -v sshpass &>/dev/null && HAS_PASS=y
+if [ -n "$PASSWORD" ] && command -v sshpass &>/dev/null; then
+    HAS_PASS=y
+fi
 
 SSH_CMD="ssh -o StrictHostKeyChecking=no"
 SCP_CMD="scp -o StrictHostKeyChecking=no"
@@ -21,9 +26,7 @@ if [ "$HAS_PASS" = "y" ]; then
     SSH_CMD="sshpass -p '$PASSWORD' ssh -o StrictHostKeyChecking=no"
     SCP_CMD="sshpass -p '$PASSWORD' scp -o StrictHostKeyChecking=no"
 else
-    echo "WARNING: sshpass not found. You'll be prompted for password repeatedly."
-    echo "  Install: sudo apt install sshpass  (Linux/WSL)"
-    echo "  Or: brew install sshpass          (macOS)"
+    echo "WARNING: sshpass or MONITOR_AI_SERVER_PASSWORD missing. You'll be prompted for password repeatedly."
 fi
 
 run_ssh() {

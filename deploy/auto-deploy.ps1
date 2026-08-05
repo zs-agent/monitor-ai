@@ -2,14 +2,15 @@
 # 在 PowerShell 中运行:
 #   cd D:\monitor-ai
 #   .\deploy\auto-deploy.ps1
-# 只需要输入服务器密码 2 次
+# 需要交互式输入服务器密码（密码不再写入脚本，见本地机密备忘文件）
 
-$SERVER = "root@101.37.84.238"
-$PASSWORD = "9neK2yU~r&st*&9"
+$SERVER_IP = $env:MONITOR_AI_SERVER_IP
+if (-not $SERVER_IP) { $SERVER_IP = Read-Host "请输入服务器 IP" }
+$SERVER = "root@$SERVER_IP"
 
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host " monitor-ai 自动部署" -ForegroundColor Cyan
-Write-Host " 域名: monitor-ai.vip → 101.37.84.238" -ForegroundColor Cyan
+Write-Host " 域名: monitor-ai.vip → $SERVER_IP" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -71,8 +72,8 @@ Write-Host " 部署流程执行完毕！" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "下一步：在阿里云 DNS 控制台添加 A 记录：" -ForegroundColor Yellow
-Write-Host "  monitor-ai.vip → 101.37.84.238" -ForegroundColor White
-Write-Host "  www.monitor-ai.vip → 101.37.84.238" -ForegroundColor White
+Write-Host "  monitor-ai.vip → $SERVER_IP" -ForegroundColor White
+Write-Host "  www.monitor-ai.vip → $SERVER_IP" -ForegroundColor White
 Write-Host ""
 Write-Host "浏览器访问: https://monitor-ai.vip" -ForegroundColor Cyan
 

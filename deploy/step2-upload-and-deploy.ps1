@@ -1,26 +1,26 @@
 # Step 2: Upload build artifacts and configure server
+# 密码通过环境变量 MONITOR_AI_SERVER_PASSWORD 注入（见本地机密备忘文件），
+# 未设置时 sshpass 不可用将回退为交互式输入。
 $ErrorActionPreference = "Stop"
-$SERVER = "root@101.37.84.238"
-$PASSWORD = "9neK2yU~r&st*&9"
+$SERVER_IP = $env:MONITOR_AI_SERVER_IP
+if (-not $SERVER_IP) { $SERVER_IP = Read-Host "请输入服务器 IP" }
+$SERVER = "root@$SERVER_IP"
+$PASSWORD = $env:MONITOR_AI_SERVER_PASSWORD
 $REMOTE_DIR = "/opt/monitor-ai"
 
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host " monitor-ai Deploy to 101.37.84.238" -ForegroundColor Cyan
+Write-Host " monitor-ai Deploy to $SERVER_IP" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 
 # --- Check sshpass availability ---
-$HAS_SSHPASS = $null -ne (Get-Command sshpass -ErrorAction SilentlyContinue)
+$HAS_SSHPASS = ($null -ne (Get-Command sshpass -ErrorAction SilentlyContinue)) -and (-not [string]::IsNullOrEmpty($PASSWORD))
 $SSH_BASE = if ($HAS_SSHPASS) { "sshpass -p '$PASSWORD' ssh -o StrictHostKeyChecking=no" } else { "ssh -o StrictHostKeyChecking=no" }
 $SCP_BASE = if ($HAS_SSHPASS) { "sshpass -p '$PASSWORD' scp -o StrictHostKeyChecking=no" } else { "scp -o StrictHostKeyChecking=no" }
 
 if (-not $HAS_SSHPASS) {
-    Write-Host "WARNING: sshpass not found. Install it via:" -ForegroundColor Red
-    Write-Host "  winget install SSHPassword" -ForegroundColor Yellow
-    Write-Host "  or use chocolatey: choco install sshpass" -ForegroundColor Yellow
-    Write-Host "  or scoop: scoop install sshpass" -ForegroundColor Yellow
-    Write-Host ""
-    Write-Host "Without sshpass, you'll be prompted for the password repeatedly." -ForegroundColor Red
-    Write-Host "The password is: 9neK2yU~r&st*&9" -ForegroundColor Red
+    Write-Host "WARNING: sshpass not found or MONITOR_AI_SERVER_PASSWORD not set." -ForegroundColor Red
+    Write-Host "  Set `$env:MONITOR_AI_SERVER_PASSWORD or install sshpass for non-interactive deploy." -ForegroundColor Yellow
+    Write-Host "Without it, you'll be prompted for the password repeatedly." -ForegroundColor Red
 }
 
 # --- Helper functions ---

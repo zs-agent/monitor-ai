@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react'
 import { loadPanelCollapsed, savePanelCollapsed } from '@/lib/panel-persistence'
 
 export type PanelSeverity = 'critical' | 'high' | 'medium' | 'low' | 'none'
-export type DataBadgeState = 'live' | 'cached' | 'unavailable' | 'static'
+export type DataBadgeState = 'live' | 'cached' | 'stale' | 'unavailable' | 'static'
 
 interface PanelBaseProps {
   id: string

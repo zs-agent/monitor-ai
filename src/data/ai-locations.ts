@@ -11,13 +11,26 @@ export interface AiLocation {
   nameZh: string
   lat: number
   lng: number
-  type: 'company' | 'research' | 'datacenter' | 'conference' | 'chip'
+  type: 'company' | 'research' | 'datacenter' | 'conference' | 'chip' | 'lab' | 'agent-project' | 'agent-platform' | 'infra'
   country: string
   city: string
   cityZh: string
   importance: number
   models: AiModel[]
   description?: string
+  /** 生态节点附加信息（全景 AI Agent 生态地图用） */
+  ecosystem?: {
+    /** 子类型：orchestration | multi-agent | mcp | rag | memory | eval | observability | deploy | inference | platform */
+    subtype: string
+    /** GitHub owner/repo，如 'langchain-ai/langgraph' */
+    github?: string
+    /** 官网 */
+    home?: string
+    /** 关联技术关键词（用于联动信号/论文匹配） */
+    techRelations?: string[]
+    /** 位置为示意（维护者所在区域） */
+    note?: string
+  }
 }
 
 export const AI_HUBS: AiLocation[] = [

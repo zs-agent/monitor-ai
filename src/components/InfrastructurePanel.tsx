@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react'
 import { type Locale } from '@/lib/i18n'
-import { AI_INFRA, type AIInfra } from '@/data/ai-stocks'
+import { AI_INFRA, type AIInfra } from '@/data/ai-infra'
 import PanelBase from './PanelBase'
 
 const TYPE_LABELS: Record<AIInfra['type'], [en: string, zh: string]> = {

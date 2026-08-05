@@ -1,0 +1,110 @@
+﻿
+> monitor-ai@0.1.0 build
+> next build
+
+  ▲ Next.js 14.2.35
+
+   Creating an optimized production build ...
+node.exe : Failed to compile.
+所在位置 行:1 字符: 1
++ & "D:\nodejs/node.exe" "D:\nodejs/node_modules/npm/bin/npm-cli.js" ru ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Failed to compile.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+
+./src/components/layout/Sidebar.tsx
+Error: 
+  [31mx[0m Expression expected
+    ,-[[36;1;4mE:\自研产品\monitor-ai\src\components\layout\Sidebar.tsx[0m:28:1]
+ [2m28[0m |   const topNavSlugs = PERSPECTIVE_TOP_NAV[perspective]
+ [2m29[0m | 
+ [2m30[0m |   const sidebarContent = (
+ [2m31[0m |     <>
+    : [31;1m     ^[0m
+ [2m32[0m |       {/* Logo */}
+ [2m33[0m |       <div className="h-12 flex items-center px-5 border-b border-[#1e1e2e] shrink-0">
+ [2m34[0m |         <span className="text-base font-bold tracking-tight">
+    `----
+
+  [31mx[0m Expected ',', got '< (jsx tag start)'
+    ,-[[36;1;4mE:\自研产品\monitor-ai\src\components\layout\Sidebar.tsx[0m:30:1]
+ [2m30[0m |   const sidebarContent = (
+ [2m31[0m |     <>
+ [2m32[0m |       {/* Logo */}
+ [2m33[0m |       <div className="h-12 flex items-center px-5 border-b border-[#1e1e2e] shrink-0">
+    : [31;1m      ^[0m
+ [2m34[0m |         <span className="text-base font-bold tracking-tight">
+ [2m35[0m |           <span className="text-[#06b6d4]">monitor</span><span className="text-[#e5e5e5]">.ai</span>
+ [2m36[0m |         </span>
+    `----
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./src/components/layout/Sidebar.tsx
+./src/components/layout/AppShell.tsx
+
+./src/app/nexus/page.tsx
+Error: 
+  [31mx[0m Expected ',', got 'text'
+    ,-[[36;1;4mE:\自研产品\monitor-ai\src\app\nexus\page.tsx[0m:82:1]
+ [2m82[0m |       models: { value: models, color: 'text-[#06b6d4]' },
+ [2m83[0m |       github: { value: github, color: 'text-[#34d399]' },
+ [2m84[0m |       companies: { value: companies, color: 'text-[#f59e0b]' },
+ [2m85[0m |       gdp: { value: '�?, color: 'text-[var(--text-muted)]' },
+    : [31;1m                                   ^^^^[0m
+ [2m86[0m |       rd: { value: '�?, color: 'text-[var(--text-muted)]' },
+ [2m87[0m |       internet: { value: '�?, color: 'text-[var(--text-muted)]' },
+ [2m88[0m |     }
+    `----
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./src/app/nexus/page.tsx
+
+./src/app/ops/page.tsx
+Error: 
+  [31mx[0m Unexpected token `div`. Expected jsx identifier
+    ,-[[36;1;4mE:\自研产品\monitor-ai\src\app\ops\page.tsx[0m:49:1]
+ [2m49[0m |   , [health, signals])
+ [2m50[0m | 
+ [2m51[0m |   return (
+ [2m52[0m |     <div className="min-h-full">
+    : [31;1m     ^^^[0m
+ [2m53[0m |       <PageHeader
+ [2m54[0m |         title={locale === 'zh' ? '源网监控' : 'OPS'}
+ [2m55[0m |         valueProp={locale === 'zh'
+    `----
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./src/app/ops/page.tsx
+
+./src/app/pulse/page.tsx
+Error: 
+  [31mx[0m Unexpected token `div`. Expected jsx identifier
+    ,-[[36;1;4mE:\自研产品\monitor-ai\src\app\pulse\page.tsx[0m:59:1]
+ [2m59[0m |   }, [signals, category, languageFilter, timeRange])
+ [2m60[0m | 
+ [2m61[0m |   return (
+ [2m62[0m |     <div className="min-h-full">
+    : [31;1m     ^^^[0m
+ [2m63[0m |       <PageHeader
+ [2m64[0m |         title={locale === 'zh' ? '情报脉冲' : 'PULSE'}
+ [2m65[0m |         valueProp={locale === 'zh'
+    `----
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./src/app/pulse/page.tsx
+
+
+> Build failed because of webpack errors

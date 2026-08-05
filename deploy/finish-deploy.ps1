@@ -1,6 +1,8 @@
 # monitor-ai - 继续部署（在已有 PowerShell 中运行）
-$SERVER = "root@101.37.84.238"
-$PASSWORD = "9neK2yU~r&st*&9"
+# 密码不再写入脚本，scp/ssh 将交互式提示输入
+$SERVER_IP = $env:MONITOR_AI_SERVER_IP
+if (-not $SERVER_IP) { $SERVER_IP = Read-Host "请输入服务器 IP" }
+$SERVER = "root@$SERVER_IP"
 
 Write-Host "Step 1: Upload files (enter password when prompted)..." -ForegroundColor Yellow
 scp -o StrictHostKeyChecking=no D:\monitor-ai\deploy\monitor-ai.tar.gz D:\monitor-ai\deploy\nginx-monitor-ai.conf ${SERVER}:/opt/
@@ -36,6 +38,6 @@ curl -s -o /dev/null -w "HTTP Status: %{http_code}\n" http://localhost:3000
 
 echo ''
 echo '=== 部署完成！==='
-echo '访问: http://101.37.84.238:3000'
+echo '访问: http://'$SERVER_IP':3000'
 echo '配置 DNS 后访问: https://monitor-ai.vip'
 "@

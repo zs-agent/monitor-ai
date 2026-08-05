@@ -18,7 +18,18 @@ const config: Config = {
         },
       },
       fontFamily: {
+        sans: ["system-ui", "-apple-system", "'Segoe UI'", "Roboto", "'Noto Sans'", "sans-serif"],
         mono: ["'SF Mono'", "'Fira Code'", "'Cascadia Code'", "'JetBrains Mono'", "monospace"],
+      },
+      fontSize: {
+        'micro': ['10px', { lineHeight: '1.4' }],
+        'xs': ['11px', { lineHeight: '1.4' }],
+        'sm': ['12px', { lineHeight: '1.5' }],
+        'base': ['14px', { lineHeight: '1.5' }],
+        'md': ['16px', { lineHeight: '1.5' }],
+        'lg': ['20px', { lineHeight: '1.3' }],
+        'xl': ['26px', { lineHeight: '1.2' }],
+        '2xl': ['32px', { lineHeight: '1.1' }],
       },
       animation: {
         'fade-in': 'fadeIn 0.35s ease-out both',

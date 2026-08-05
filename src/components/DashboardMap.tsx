@@ -1,12 +1,13 @@
-'use client'
+﻿'use client'
 
-import { useEffect, useState, useMemo, useRef } from 'react'
+import { useEffect, useState, useMemo, useRef, memo } from 'react'
 import { type Locale } from '@/lib/i18n'
 import type { Signal } from '@/types/signal'
 import { AI_HUBS, type AiLocation } from '@/data/ai-locations'
+import { ECOSYSTEM_ENTITIES, TECH_CONNECTIONS, ECO_CONN_LABELS, ECO_CONN_COLORS, ECO_SUBTYPE_LABELS } from '@/data/agent-ecosystem'
 import PanelBase from './PanelBase'
 
-interface Props { locale: Locale; signals?: Signal[] }
+interface Props { locale: Locale; signals?: Signal[]; onSelectEntity?: (entity: AiLocation) => void }
 
 const AUX_HUBS: AiLocation[] = [
   { id: 'google-sf', name: 'Google AI', nameZh: '谷歌AI', lat: 37.789, lng: -122.390, type: 'company', country: 'US', city: 'San Francisco', cityZh: '旧金山', importance: 4, models: [] },
@@ -30,7 +31,16 @@ const AUX_HUBS: AiLocation[] = [
   { id: 'chicago', name: 'Chicago AI', nameZh: '芝加哥AI', lat: 41.878, lng: -87.629, type: 'research', country: 'US', city: 'Chicago', cityZh: '芝加哥', importance: 2, models: [] },
 ]
 
-const ALL_HUBS: AiLocation[] = [...AI_HUBS, ...AUX_HUBS]
+const ALL_HUBS: AiLocation[] = [...AI_HUBS, ...AUX_HUBS, ...ECOSYSTEM_ENTITIES]
+
+/** 技术关系连线 → 与既有 CONNECTIONS 同构 */
+const TECH_CONNECTION_ROWS = TECH_CONNECTIONS.map(c => ({
+  from: c.from,
+  to: c.to,
+  type: c.type,
+  labelEn: ECO_CONN_LABELS[c.type].en,
+  labelZh: ECO_CONN_LABELS[c.type].zh,
+}))
 
 const CONNECTIONS = [
   { from: 'openai', to: 'deepseek', type: 'compete', labelEn: 'Competition', labelZh: '竞争' },
@@ -45,7 +55,7 @@ const CONNECTIONS = [
   { from: 'openai', to: 'microsoft-ai', type: 'partner', labelEn: 'Partnership', labelZh: '合作伙伴' },
   { from: 'meta-ai', to: 'stability', type: 'collab', labelEn: 'Open Source', labelZh: '开源协作' },
   { from: 'nvidia', to: 'sense-time', type: 'partner', labelEn: 'Chip Supply', labelZh: '芯片供应' },
-  { from: 'google-dm', to: 'deepmind-ldn', type: 'partner', labelEn: 'Internal', labelZh: '内部研发' },
+  { from: 'google-dm', to: 'deepmind-ldn', type: 'partner', labelEn: 'Internal', labelZh: '内部协作' },
   { from: 'moonshot', to: 'minimax', type: 'compete', labelEn: 'Competition', labelZh: '竞争' },
   { from: 'anthropic', to: 'cohere', type: 'compete', labelEn: 'Competition', labelZh: '竞争' },
   { from: 'openai', to: 'meta-ai', type: 'compete', labelEn: 'Competition', labelZh: '竞争' },
@@ -83,6 +93,9 @@ const CONNECTIONS = [
 function getHubById(id: string): AiLocation | undefined {
   return ALL_HUBS.find(h => h.id === id)
 }
+
+/** 全部连线：既有竞争/合作/研究 + 生态技术关系 */
+const ALL_CONNECTIONS = [...CONNECTIONS, ...TECH_CONNECTION_ROWS]
 
 const CITY_MAP: Record<string, [number, number]> = {
   'san francisco': [37.7749, -122.4194], 'sf': [37.7749, -122.4194],
@@ -190,23 +203,30 @@ const TYPE_LABELS: Record<string, { en: string; zh: string }> = {
   datacenter: { en: 'Data Center', zh: '数据中心' },
   conference: { en: 'Conference', zh: '会议' },
   chip: { en: 'Chip/Hardware', zh: '芯片/硬件' },
+  lab: { en: 'Model Lab', zh: '大模型厂商' },
+  'agent-project': { en: 'Agent Project', zh: 'Agent 开源项目' },
+  'agent-platform': { en: 'Agent Platform', zh: '企业级 Agent 平台' },
+  infra: { en: 'Infrastructure', zh: '基础设施' },
 }
 
 function HubPopupContent({
   displayName, displayCity, country, color, typeDisplay, importance,
-  description, models, connected, nearbySignals, isZh,
+  description, models, connected, nearbySignals, isZh, ecosystem, onSelectEntity,
 }: {
   displayName: string; displayCity: string; country: string;
   color: string; typeDisplay: string; importance: number;
   description?: string; models: any[]; connected: any[]; nearbySignals: number; isZh: boolean;
+  ecosystem?: AiLocation['ecosystem']; onSelectEntity?: () => void;
 }) {
   const importanceDots = '●'.repeat(importance) + '○'.repeat(5 - importance)
+  const subtypeLabel = ecosystem?.subtype ? (ECO_SUBTYPE_LABELS[ecosystem.subtype as keyof typeof ECO_SUBTYPE_LABELS] || { en: ecosystem.subtype, zh: ecosystem.subtype }) : null
   return (
     <div style={{ fontSize: '11px', color: '#e5e5e5', lineHeight: 1.5, minWidth: 240, maxWidth: 320 }}>
       <div style={{ fontWeight: 600, fontSize: '14px', marginBottom: 2 }}>{displayName}</div>
-      <div style={{ color: '#5c5c72', marginBottom: 6, fontSize: '10px' }}>{displayCity}, {country}</div>
+      <div style={{ color: '#5c5c72', marginBottom: 6, fontSize: '10px' }}>{displayCity}, {country}{ecosystem?.note ? ` · ${ecosystem.note}` : ''}</div>
       <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
         <span style={{ fontSize: '8px', padding: '2px 8px', borderRadius: 3, background: `${color}20`, color, border: `1px solid ${color}40` }}>{typeDisplay}</span>
+        {subtypeLabel && <span style={{ fontSize: '8px', padding: '2px 8px', borderRadius: 3, background: `${color}14`, color: `${color}cc`, border: `1px solid ${color}30` }}>{isZh ? subtypeLabel.zh : subtypeLabel.en}</span>}
         <span style={{ fontSize: '9px', color: '#8b8ba0' }}>{isZh ? '重要度' : 'Importance'}: {importanceDots}</span>
       </div>
       {description ? <div style={{ fontSize: '10px', color: '#8b8ba0', marginBottom: 8, padding: '6px 8px', background: '#0c0c14', borderRadius: 4 }}>📋 {description}</div> : null}
@@ -243,21 +263,48 @@ function HubPopupContent({
           📍 {nearbySignals} {isZh ? '条附近信号' : 'nearby signals'}
         </div>
       ) : null}
+      {(ecosystem || onSelectEntity) && (
+        <div style={{ marginTop: 8, display: 'flex', gap: 6, alignItems: 'center', borderTop: '1px solid #1e1e2e', paddingTop: 6 }}>
+          {onSelectEntity && (
+            <button
+              onClick={onSelectEntity}
+              style={{ fontSize: '9px', padding: '3px 10px', borderRadius: 4, background: '#06b6d420', color: '#06b6d4', border: '1px solid #06b6d440', cursor: 'pointer' }}
+            >
+              {isZh ? '查看详情并联动' : 'Details & related'}
+            </button>
+          )}
+          {ecosystem?.github && (
+            <a href={`https://github.com/${ecosystem.github}`} target="_blank" rel="noopener noreferrer"
+              style={{ fontSize: '9px', color: '#8b8ba0', textDecoration: 'none' }}>
+              GitHub ↗
+            </a>
+          )}
+          {ecosystem?.home && (
+            <a href={ecosystem.home} target="_blank" rel="noopener noreferrer"
+              style={{ fontSize: '9px', color: '#8b8ba0', textDecoration: 'none' }}>
+              Home ↗
+            </a>
+          )}
+        </div>
+      )}
     </div>
   )
 }
 
-const CONN_COLORS: Record<string, string> = { compete: '#ff4444', partner: '#06b6d4', collab: '#a78bfa' }
-const CONN_LABELS: Record<string, { en: string; zh: string }> = {
-  compete: { en: 'Competition', zh: '竞争' },
-  partner: { en: 'Partnership', zh: '合作伙伴' },
-  collab: { en: 'Research', zh: '研究合作' },
+const CONN_COLORS: Record<string, string> = { ...ECO_CONN_COLORS, compete: '#ff4444', partner: '#06b6d4', collab: '#a78bfa' }
+const CONN_LABELS: Record<string, { en: string; zh: string }> = { ...ECO_CONN_LABELS, compete: { en: 'Competition', zh: '竞争' }, partner: { en: 'Partnership', zh: '合作伙伴' }, collab: { en: 'Research', zh: '研究合作' } }
+const HUB_COLORS: Record<string, string> = {
+  company: '#06b6d4', research: '#a78bfa', datacenter: '#f59e0b', conference: '#34d399', chip: '#06b6d4',
+  lab: '#38bdf8', 'agent-project': '#34d399', 'agent-platform': '#fb923c', infra: '#94a3b8',
 }
-const HUB_COLORS: Record<string, string> = { company: '#06b6d4', research: '#a78bfa', datacenter: '#f59e0b', conference: '#34d399', chip: '#06b6d4' }
 
-type MapLayer = 'company' | 'research' | 'chip' | 'datacenter' | 'signal' | 'connection'
+type MapLayer = 'company' | 'research' | 'chip' | 'datacenter' | 'lab' | 'agent-project' | 'agent-platform' | 'infra' | 'signal' | 'connection'
 
 const LAYER_OPTIONS: { key: MapLayer; label: Record<string, string>; color: string }[] = [
+  { key: 'lab', label: { en: 'Model Labs', zh: '大模型厂商' }, color: '#38bdf8' },
+  { key: 'agent-project', label: { en: 'Agent Projects', zh: 'Agent 开源' }, color: '#34d399' },
+  { key: 'agent-platform', label: { en: 'Agent Platforms', zh: 'Agent 平台' }, color: '#fb923c' },
+  { key: 'infra', label: { en: 'Infrastructure', zh: '基础设施' }, color: '#94a3b8' },
   { key: 'company', label: { en: 'Company', zh: '公司' }, color: '#06b6d4' },
   { key: 'research', label: { en: 'Research', zh: '研究机构' }, color: '#a78bfa' },
   { key: 'chip', label: { en: 'Chip/HW', zh: '芯片/硬件' }, color: '#06b6d4' },
@@ -266,7 +313,7 @@ const LAYER_OPTIONS: { key: MapLayer; label: Record<string, string>; color: stri
   { key: 'connection', label: { en: 'Connections', zh: '关系连线' }, color: '#ff4444' },
 ]
 
-export default function DashboardMap({ locale, signals }: Props) {
+const DashboardMap = memo(function DashboardMap({ locale, signals, onSelectEntity }: Props) {
   const [MapComponents, setMapComponents] = useState<{
     MapContainer: React.ComponentType<any>
     TileLayer: React.ComponentType<any>
@@ -278,9 +325,7 @@ export default function DashboardMap({ locale, signals }: Props) {
     useMap: () => any
   } | null>(null)
   const [L, setL] = useState<any>(null)
-  const [animatedOffset, setAnimatedOffset] = useState(0)
-  const animRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const [activeLayers, setActiveLayers] = useState<MapLayer[]>(['company', 'research', 'chip', 'signal', 'connection'])
+  const [activeLayers, setActiveLayers] = useState<MapLayer[]>(['lab', 'agent-project', 'agent-platform', 'infra', 'company', 'research', 'signal', 'connection'])
   const [layerOpen, setLayerOpen] = useState(false)
 
   useEffect(() => {
@@ -303,16 +348,13 @@ export default function DashboardMap({ locale, signals }: Props) {
     import('leaflet').then(lib => setL(lib)).catch((err) => { console.error('Failed to load leaflet:', err) })
   }, [])
 
-  useEffect(() => {
-    animRef.current = setInterval(() => {
-      setAnimatedOffset(o => (o + 0.5) % 20)
-    }, 80)
-    return () => { if (animRef.current) clearInterval(animRef.current) }
-  }, [])
+  const mapWrapRef = useRef<HTMLDivElement>(null)
+
+  // 连线流动动画改为纯 CSS（见 globals.css 的 .dash-flow-line），不再用 JS 定时器驱动重渲染
 
   const signalLocations = useMemo(() => extractSignalLocations(signals), [signals])
   const connectionLines = useMemo(() =>
-    CONNECTIONS.map(c => {
+    ALL_CONNECTIONS.map(c => {
       const fromHub = getHubById(c.from)
       const toHub = getHubById(c.to)
       if (!fromHub || !toHub) return null
@@ -323,7 +365,7 @@ export default function DashboardMap({ locale, signals }: Props) {
 
   const getHubConnections = useMemo(() => {
     const map = new Map<string, Array<{ otherName: string; otherNameZh: string; type: string; otherId: string }>>()
-    for (const c of CONNECTIONS) {
+    for (const c of ALL_CONNECTIONS) {
       const fromHub = getHubById(c.from)
       const toHub = getHubById(c.to)
       if (!fromHub || !toHub) continue
@@ -384,7 +426,7 @@ export default function DashboardMap({ locale, signals }: Props) {
 
   if (!MapComponents) {
     return (
-      <PanelBase id="map" title={locale === 'zh' ? '全球 AI 活动地图' : 'Global AI Activity Map'} dataBadge="static" collapsible className="h-full">
+      <PanelBase id="map" title={locale === 'zh' ? '全景 AI Agent 生态地图' : 'AI Agent Ecosystem Map'} dataBadge="static" collapsible className="h-full">
         <div className="h-full min-h-0 flex items-center justify-center">
           <div className="panel-loading"><div className="panel-loading-radar"><div className="panel-radar-dot" /></div><div className="panel-loading-text">{locale === 'zh' ? '加载地图...' : 'Loading map...'}</div></div>
         </div>
@@ -399,6 +441,10 @@ export default function DashboardMap({ locale, signals }: Props) {
     if (hub.type === 'research' && isLayerActive('research')) return true
     if (hub.type === 'chip' && isLayerActive('chip')) return true
     if (hub.type === 'datacenter' && isLayerActive('datacenter')) return true
+    if (hub.type === 'lab' && isLayerActive('lab')) return true
+    if (hub.type === 'agent-project' && isLayerActive('agent-project')) return true
+    if (hub.type === 'agent-platform' && isLayerActive('agent-platform')) return true
+    if (hub.type === 'infra' && isLayerActive('infra')) return true
     if (hub.type === 'conference') return false
     return false
   })
@@ -409,7 +455,7 @@ export default function DashboardMap({ locale, signals }: Props) {
   return (
     <PanelBase
       id="map"
-      title={locale === 'zh' ? '全球 AI 活动地图' : 'Global AI Activity Map'}
+      title={locale === 'zh' ? '全景 AI Agent 生态地图' : 'AI Agent Ecosystem Map'}
       dataBadge="static"
       collapsible
       className="h-full"
@@ -447,7 +493,7 @@ export default function DashboardMap({ locale, signals }: Props) {
         </div>
       }
     >
-      <div className="h-full min-h-0">
+      <div className="h-full min-h-0" ref={mapWrapRef}>
         <MapContainer
           center={[25, 10]}
           zoom={2}
@@ -468,12 +514,11 @@ export default function DashboardMap({ locale, signals }: Props) {
           {showConnections && connectionLines.map((conn, i) => {
             const color = CONN_COLORS[conn.type] || '#555'
             const positions: [number, number][] = [conn.from, conn.to]
-            const dashOffset = (animatedOffset + i * 3) % 20
             return (
               <Polyline
                 key={`conn-${i}`}
                 positions={positions}
-                pathOptions={{ color, weight: 1.2, opacity: 0.45, dashArray: '6 8', dashOffset: dashOffset.toString() }}
+                pathOptions={{ color, weight: 1.2, opacity: 0.45, dashArray: '6 8', className: 'dash-flow-line' }}
               >
                 <Tooltip direction="center" opacity={0.85}>
                   <span className="text-[9px]">{conn.label}</span>
@@ -496,7 +541,10 @@ export default function DashboardMap({ locale, signals }: Props) {
 
           {/* AI Hub markers */}
           {filteredHubs.map(hub => {
-            const size = hub.importance >= 5 ? 8 : hub.importance >= 4 ? 6 : hub.importance >= 3 ? 4 : 2.5
+            const isEco = hub.type === 'lab' || hub.type === 'agent-project' || hub.type === 'agent-platform' || hub.type === 'infra'
+            const size = isEco
+              ? (hub.importance >= 5 ? 10 : hub.importance >= 4 ? 9 : 7)
+              : (hub.importance >= 5 ? 8 : hub.importance >= 4 ? 6 : hub.importance >= 3 ? 4 : 2.5)
             const color = HUB_COLORS[hub.type] || '#06b6d4'
             const connected = getHubConnections.get(hub.id) || []
             const nearbySignals = signalLocations.filter(l =>
@@ -507,13 +555,16 @@ export default function DashboardMap({ locale, signals }: Props) {
             const displayCity = isZh ? hub.cityZh : hub.city
             const typeLabel = (TYPE_LABELS[hub.type] || { en: hub.type, zh: hub.type })
             const typeDisplay = isZh ? typeLabel.zh : typeLabel.en
+            const ecoSubtype = hub.ecosystem?.subtype
+              ? (ECO_SUBTYPE_LABELS[hub.ecosystem.subtype as keyof typeof ECO_SUBTYPE_LABELS] || { en: hub.ecosystem.subtype, zh: hub.ecosystem.subtype })
+              : null
 
             return (
               <CircleMarker
                 key={hub.id}
                 center={[hub.lat, hub.lng]}
                 radius={size}
-                pathOptions={{ fillColor: color, fillOpacity: 0.75, color: color, weight: 1.5, opacity: 0.5 }}
+                pathOptions={{ fillColor: color, fillOpacity: isEco ? 0.9 : 0.75, color, weight: isEco ? 2 : 1.5, opacity: 0.6 }}
                 eventHandlers={{
                   click: (e: { target: { openPopup: () => void } }) => e.target.openPopup(),
                 }}
@@ -531,12 +582,14 @@ export default function DashboardMap({ locale, signals }: Props) {
                     connected={connected}
                     nearbySignals={nearbySignals}
                     isZh={isZh}
+                    ecosystem={hub.ecosystem}
+                    onSelectEntity={onSelectEntity ? () => onSelectEntity(hub) : undefined}
                   />
                 </Popup>
                 <Tooltip direction="top" offset={[0, -size - 5]} opacity={0.9}>
                   <div style={{ fontSize: '10px' }}>
                     <div style={{ fontWeight: 600 }}>{displayName}</div>
-                    <div style={{ fontSize: '8px', color: '#8b8ba0' }}>{displayCity} · {typeDisplay} · {'●'.repeat(hub.importance)}</div>
+                    <div style={{ fontSize: '8px', color: '#8b8ba0' }}>{displayCity} · {typeDisplay}{ecoSubtype ? ` · ${isZh ? ecoSubtype.zh : ecoSubtype.en}` : ''} · {'●'.repeat(hub.importance)}</div>
                     {hub.models.length > 0 && (
                       <div style={{ fontSize: '7px', color: CONN_COLORS.partner }}>
                         {hub.models.length} model{hub.models.length > 1 ? 's' : ''}: {hub.models[0].name}{hub.models.length > 1 ? '...' : ''}
@@ -574,15 +627,24 @@ export default function DashboardMap({ locale, signals }: Props) {
       </div>
 
       <div className="flex items-center gap-3 px-4 py-2 border-t border-[#1e1e2e] text-[9px] text-[#5c5c72] flex-wrap">
+        {isLayerActive('lab') && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#38bdf8]" />{locale === 'zh' ? '大模型厂商' : 'Model Lab'}</span>}
+        {isLayerActive('agent-project') && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#34d399]" />{locale === 'zh' ? 'Agent 开源' : 'Agent OSS'}</span>}
+        {isLayerActive('agent-platform') && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#fb923c]" />{locale === 'zh' ? 'Agent 平台' : 'Agent Platform'}</span>}
+        {isLayerActive('infra') && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#94a3b8]" />{locale === 'zh' ? '基础设施' : 'Infra'}</span>}
         {isLayerActive('company') && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#06b6d4]" />{locale === 'zh' ? '公司' : 'Company'}</span>}
         {isLayerActive('chip') && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#06b6d4]" style={{ opacity: 0.6 }} />{locale === 'zh' ? '芯片/硬件' : 'Chip/Hardware'}</span>}
         {isLayerActive('research') && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#a78bfa]" />{locale === 'zh' ? '研究机构' : 'Research'}</span>}
         {isLayerActive('signal') && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#f59e0b]" />{locale === 'zh' ? '信号' : 'Signal'}</span>}
-        {isLayerActive('connection') && <><span className="flex items-center gap-1"><span className="w-1.5 h-0 rounded-sm border-t border-dashed border-[#ff4444]/50 w-4" />{locale === 'zh' ? '竞争' : 'Compete'}</span>
-        <span className="flex items-center gap-1"><span className="w-1.5 h-0 rounded-sm border-t border-dashed border-[#06b6d4]/50 w-4" />{locale === 'zh' ? '合作' : 'Partner'}</span>
-        <span className="flex items-center gap-1"><span className="w-1.5 h-0 rounded-sm border-t border-dashed border-[#a78bfa]/50 w-4" />{locale === 'zh' ? '研究' : 'Research'}</span></>}
-        <span className="ml-auto">{filteredHubs.length} {locale === 'zh' ? '个可见据点' : 'visible hubs'}{showConnections ? ` · ${CONNECTIONS.length} ${locale === 'zh' ? '条连线' : 'connections'}` : ''}</span>
+        {isLayerActive('connection') && <><span className="flex items-center gap-1"><span className="w-1.5 h-0 rounded-sm border-t border-dashed border-[#06b6d4]/60 w-4" />MCP</span>
+        <span className="flex items-center gap-1"><span className="w-1.5 h-0 rounded-sm border-t border-dashed border-[#34d399]/60 w-4" />RAG</span>
+        <span className="flex items-center gap-1"><span className="w-1.5 h-0 rounded-sm border-t border-dashed border-[#a78bfa]/60 w-4" />Memory</span>
+        <span className="flex items-center gap-1"><span className="w-1.5 h-0 rounded-sm border-t border-dashed border-[#f59e0b]/60 w-4" />Eval</span>
+        <span className="flex items-center gap-1"><span className="w-1.5 h-0 rounded-sm border-t border-dashed border-[#fb7185]/60 w-4" />Deploy</span>
+        <span className="flex items-center gap-1"><span className="w-1.5 h-0 rounded-sm border-t border-dashed border-[#ef4444]/60 w-4" />{locale === 'zh' ? '竞争' : 'Compete'}</span></>}
+        <span className="ml-auto">{filteredHubs.length} {locale === 'zh' ? '个可见据点' : 'visible hubs'}{showConnections ? ` · ${ALL_CONNECTIONS.length} ${locale === 'zh' ? '条连线' : 'connections'}` : ''}</span>
       </div>
     </PanelBase>
   )
-}
+})
+
+export default DashboardMap

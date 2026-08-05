@@ -5,7 +5,7 @@
 | 项目 | 值 |
 |------|-----|
 | 域名 | monitor-ai.vip |
-| 服务器 IP | 101.37.84.238 |
+| 服务器 IP | <SERVER_IP> |
 | 操作系统 | Ubuntu 22.04+ |
 | 部署方式 | Next.js Standalone + Nginx + PM2 |
 
@@ -16,13 +16,13 @@
 SSH 登录服务器，运行初始化脚本：
 
 ```bash
-ssh root@101.37.84.238
-# 输入密码：9neK2yU~r&st*&9
+ssh root@<SERVER_IP>
+# 输入密码（见本地机密备忘文件，本指南不记录明文）
 
 # 上传部署文件夹
 # （在本地执行）
 cd D:\monitor-ai
-scp -r deploy\* root@101.37.84.238:/opt/
+scp -r deploy\* root@<SERVER_IP>:/opt/
 ```
 
 然后在服务器上执行：
@@ -54,16 +54,16 @@ npm run build
 
 ```powershell
 # 上传 standalone 服务器
-rsync -avz --delete .next/standalone/ root@101.37.84.238:/opt/monitor-ai/
+rsync -avz --delete .next/standalone/ root@<SERVER_IP>:/opt/monitor-ai/
 
 # 上传 public 资源
-rsync -avz --delete public/ root@101.37.84.238:/opt/monitor-ai/public/
+rsync -avz --delete public/ root@<SERVER_IP>:/opt/monitor-ai/public/
 
 # 上传静态文件
-rsync -avz .next/static/ root@101.37.84.238:/opt/monitor-ai/.next/static/
+rsync -avz .next/static/ root@<SERVER_IP>:/opt/monitor-ai/.next/static/
 
 # 上传部署配置
-scp deploy/nginx-monitor-ai.conf root@101.37.84.238:/opt/monitor-ai/
+scp deploy/nginx-monitor-ai.conf root@<SERVER_IP>:/opt/monitor-ai/
 ```
 
 ---
@@ -73,7 +73,7 @@ scp deploy/nginx-monitor-ai.conf root@101.37.84.238:/opt/monitor-ai/
 SSH 登录服务器：
 
 ```bash
-ssh root@101.37.84.238
+ssh root@<SERVER_IP>
 ```
 
 ### 4.1 安装生产依赖
@@ -91,7 +91,7 @@ npm install --production
 PORT=3000 node server.js
 ```
 
-访问 `http://101.37.84.238:3000` 验证服务正常。
+访问 `http://<SERVER_IP>:3000` 验证服务正常。
 
 ### 4.3 配置 Nginx
 
@@ -150,8 +150,8 @@ pm2 logs monitor-ai --lines 20
 
 | 记录类型 | 主机记录 | 记录值 |
 |---------|---------|--------|
-| A | @ | 101.37.84.238 |
-| A | www | 101.37.84.238 |
+| A | @ | <SERVER_IP> |
+| A | www | <SERVER_IP> |
 
 TTL 建议设置为 600（10 分钟），等待 DNS 生效（一般 1-10 分钟）。
 

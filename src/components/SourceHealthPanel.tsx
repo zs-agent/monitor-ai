@@ -6,7 +6,7 @@ import PanelBase from './PanelBase'
 export interface SourceItem {
   id: string
   name: string
-  status: 'fresh' | 'stale' | 'error' | 'no_data'
+  status: 'fresh' | 'stale' | 'very_stale' | 'error' | 'no_data' | 'disabled'
   lastUpdate: number | null
   itemCount: number
 }
@@ -19,15 +19,19 @@ interface Props {
 const STATUS_DOT: Record<string, string> = {
   fresh: 'bg-emerald-400',
   stale: 'bg-amber-400',
+  very_stale: 'bg-orange-500',
   error: 'bg-red-400',
   no_data: 'bg-slate-400',
+  disabled: 'bg-slate-600',
 }
 
 const STATUS_LABEL: Record<string, [en: string, zh: string]> = {
   fresh: ['Live', '在线'],
   stale: ['Stale', '延迟'],
+  very_stale: ['Very Stale', '严重延迟'],
   error: ['Error', '异常'],
   no_data: ['No Data', '无数据'],
+  disabled: ['Disabled', '停用'],
 }
 
 function timeSince(ts: number | null): string {

@@ -103,7 +103,7 @@ export default function ModelDetailPage() {
             <div className="space-y-2 text-[11px]">
               <div className="flex justify-between"><span className="text-[#5c5c72]">{locale === 'zh' ? '发布日期' : 'Release'}</span><span className="text-[#e5e5e5]">{model.releaseDate}</span></div>
               <div className="flex justify-between"><span className="text-[#5c5c72]">{locale === 'zh' ? '参数量' : 'Params'}</span><span className="text-[#e5e5e5]">{model.params}</span></div>
-              <div className="flex justify-between"><span className="text-[#5c5c72]">{locale === 'zh' ? '研发机构' : 'Organization'}</span><span className="text-[#e5e5e5]">{model.organization}</span></div>
+              <div className="flex justify-between"><span className="text-[#5c5c72]">{locale === 'zh' ? '机构' : 'Organization'}</span><span className="text-[#e5e5e5]">{model.organization}</span></div>
               <div className="flex justify-between"><span className="text-[#5c5c72]">{locale === 'zh' ? '国家/地区' : 'Country'}</span><span className="text-[#e5e5e5]">{model.country === 'CN' ? 'China' : 'United States'}</span></div>
             </div>
           </div>
