@@ -13,6 +13,10 @@ export const huggingfaceProvider: SignalProvider = {
     const res = await fetchWithTimeout('https://huggingface.co/api/daily_papers', {}, TIMEOUT)
     if (!res.ok) throw new Error(`HF daily_papers HTTP ${res.status}`)
     const data: any[] = await res.json()
+    // 空数组防护：空结果视为失败，避免 0 条记为 ok 而清空该源既有快照内容
+    if (!Array.isArray(data) || data.length === 0) {
+      throw new Error('HF daily_papers returned empty list')
+    }
 
     const papers = data.slice(0, 15).map((p: any) => ({
       id: `hf-${p.id || p.paper?.id || Math.random().toString(36).slice(2)}`,

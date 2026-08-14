@@ -5,6 +5,39 @@ const S2_API = 'https://api.semanticscholar.org/graph/v1/paper/search'
 const GH_API = 'https://api.github.com/search/repositories'
 const TIMEOUT = 15000
 
+/** 结果缓存：指标×国家×年份 → 数值。AI 原生指标变化缓慢，TTL 30min 避免重复请求。 */
+const CACHE_TTL = 30 * 60 * 1000
+const resultCache = new Map<string, { value: number; ts: number }>()
+
+/** 并发上限：避免 34 个请求同时打向第三方 API 触发限流 */
+const MAX_CONCURRENCY = 6
+
+async function cachedValue(key: string, fetch: () => Promise<number>): Promise<number> {
+  const hit = resultCache.get(key)
+  if (hit && Date.now() - hit.ts < CACHE_TTL) return hit.value
+  const value = await fetch()
+  resultCache.set(key, { value, ts: Date.now() })
+  return value
+}
+
+/** 有界并发执行：按 items 顺序返回结果，任一项失败不影响其余（fetch 函数自带 catch） */
+async function mapWithConcurrency<T>(items: T[], worker: (item: T) => Promise<number>): Promise<number[]> {
+  const results = new Array<number>(items.length)
+  let next = 0
+  const runner = async (): Promise<void> => {
+    while (next < items.length) {
+      const i = next++
+      results[i] = await worker(items[i])
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(MAX_CONCURRENCY, items.length) }, () => runner()))
+  return results
+}
+
+function countryNameOf(country: string): string {
+  return country === 'USA' ? 'United States' : country === 'CHN' ? 'China' : country
+}
+
 /** 从 Semantic Scholar 按年份统计 AI 论文数量 */
 async function fetchPapersByYear(year: number, country: string): Promise<number> {
   try {
@@ -73,33 +106,48 @@ export async function fetchAIIndicatorData(
   yearStart: number,
   yearEnd: number,
 ): Promise<IndicatorValue[]> {
-  const values: IndicatorValue[] = []
+  const years: number[] = []
+  for (let year = yearStart; year <= yearEnd; year++) years.push(year)
 
-  for (const country of countries) {
-    for (let year = yearStart; year <= yearEnd; year++) {
-      let value: number | null = null
-
-      switch (indicator) {
-        case 'AI.PAPERS':
-          value = await fetchPapersByYear(year, country)
-          break
-        case 'AI.GITHUB':
-          value = await fetchGitHubByYear(year)
-          break
-        case 'AI.NEWS':
-          value = await fetchHNByYear(year)
-          break
+  // AI.GITHUB / AI.NEWS 不区分国家：每年只请求一次，各国复用同一数值，
+  // 避免同一数值为每个国家重复请求（原实现 34 次串行请求）
+  if (indicator === 'AI.GITHUB' || indicator === 'AI.NEWS') {
+    const byYear = await mapWithConcurrency(years, year =>
+      cachedValue(`${indicator}:*:${year}`, () =>
+        indicator === 'AI.GITHUB' ? fetchGitHubByYear(year) : fetchHNByYear(year)),
+    )
+    const values: IndicatorValue[] = []
+    for (const country of countries) {
+      for (let i = 0; i < years.length; i++) {
+        values.push({
+          country,
+          countryName: countryNameOf(country),
+          year: years[i],
+          value: byYear[i],
+          indicator,
+        })
       }
-
-      values.push({
-        country,
-        countryName: country === 'USA' ? 'United States' : country === 'CHN' ? 'China' : country,
-        year,
-        value,
-        indicator,
-      })
     }
+    return values
   }
 
+  // AI.PAPERS：国家 × 年份并行拉取（有界并发），结果按原顺序组装
+  const tasks: { country: string; year: number }[] = []
+  for (const country of countries) {
+    for (const year of years) tasks.push({ country, year })
+  }
+  const results = await mapWithConcurrency(tasks, t =>
+    cachedValue(`${indicator}:${t.country}:${t.year}`, () => fetchPapersByYear(t.year, t.country)))
+
+  const values: IndicatorValue[] = []
+  for (let i = 0; i < tasks.length; i++) {
+    values.push({
+      country: tasks[i].country,
+      countryName: countryNameOf(tasks[i].country),
+      year: tasks[i].year,
+      value: results[i],
+      indicator,
+    })
+  }
   return values
 }

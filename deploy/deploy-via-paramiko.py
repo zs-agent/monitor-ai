@@ -1,16 +1,20 @@
 # -*- coding: utf-8 -*-
-"""monitor-ai 增量部署：本地打包 -> SFTP 上传 -> 服务器备份+解压 -> npm install -> PM2 重启 -> 验证"""
+"""monitor-ai 增量部署：本地打包 -> SFTP 上传 -> 服务器备份+解压 -> PM2 重启 -> 验证
+
+凭据通过环境变量提供（绝不写入脚本或明文文件）：
+  MONITOR_AI_SERVER_IP       服务器 IP（可选，默认 101.37.84.238）
+  MONITOR_AI_SERVER_USER     登录用户（可选，默认 root）
+  MONITOR_AI_SERVER_PASSWORD 密码（可选；不设置时 paramiko 自动尝试 SSH 密钥认证）
+"""
 import os, sys, tarfile, io, paramiko
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(BASE)
-HOST = "101.37.84.238"
-USER = "root"
-with open(os.path.join(ROOT, "新建 文本文档.txt"), encoding="utf-8") as f:
-    lines = [l for l in f.read().splitlines() if l.strip()]
-PASSWORD = lines[2].split(": ", 1)[1].strip()
+HOST = os.environ.get("MONITOR_AI_SERVER_IP", "101.37.84.238")
+USER = os.environ.get("MONITOR_AI_SERVER_USER", "root")
+PASSWORD = os.environ.get("MONITOR_AI_SERVER_PASSWORD")
 STAGE_DIR = os.path.join(BASE, "stage")
 STANDALONE = os.path.join(ROOT, ".next", "standalone")
 

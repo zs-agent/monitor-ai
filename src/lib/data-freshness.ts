@@ -31,7 +31,6 @@ export interface PanelFreshnessSource {
 
 const FRESH_THRESHOLD = 15 * 60 * 1000
 const STALE_THRESHOLD = 2 * 60 * 60 * 1000
-const VERY_STALE_THRESHOLD = 6 * 60 * 60 * 1000
 
 const INTELLIGENCE_GAP_MESSAGES: Record<string, string> = {
   hackernews: 'Breaking AI news may be missed—Hacker News feed unavailable',
@@ -165,8 +164,8 @@ class DataFreshnessTracker {
     const age = Date.now() - source.lastUpdate
     if (age <= FRESH_THRESHOLD) return 'fresh'
     if (age <= STALE_THRESHOLD) return 'stale'
-    if (age <= VERY_STALE_THRESHOLD) return 'very_stale'
-    return 'no_data'
+    // 超过 6h 仍是有数据但极旧，语义应为 very_stale 而非 no_data（no_data 表示从未更新）
+    return 'very_stale'
   }
 
   private notifyListeners(): void {
