@@ -29,6 +29,8 @@ export interface ModelReportItem {
   keyChange: string
   /** 对实际使用的影响 */
   usageImpact: string
+  /** 是否官方发布（true=厂商官方；false=社区权重更新；undefined=人工核实静态） */
+  official?: boolean
 }
 
 export const MODEL_REPORTS: ModelReportItem[] = [

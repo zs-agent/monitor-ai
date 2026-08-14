@@ -1,12 +1,20 @@
 // /api/agent-radar — Agent 开源雷达：GitHub 真实指标 + 7 日增长快照
 // 降级链：live（真实数据）→ cached（15min 缓存）→ partial（部分仓库失败）→ static（仅 curated 字段）
 import { NextResponse } from 'next/server'
+import path from 'node:path'
 import { AGENT_RADAR_PROJECTS, type AgentRadarProject } from '@/data/agent-radar'
 import { fetchWithTimeout } from '@/lib/fetch-with-timeout'
+import { createStarSnapshot } from '@/lib/star-snapshot'
+
+export const dynamic = 'force-dynamic'
 
 const TIMEOUT = 8000
 const CACHE_TTL = 15 * 60 * 1000
 const SNAPSHOT_INTERVAL = 24 * 60 * 60 * 1000
+
+/** 每日快照持久化：写入 data/.radar-snapshot.json，服务重启后 7 日增长不丢失 */
+const SNAPSHOT_FILE = path.join(process.cwd(), 'data', '.radar-snapshot.json')
+const starSnapshot = createStarSnapshot(SNAPSHOT_FILE)
 
 interface RadarCacheEntry {
   projects: AgentRadarProject[]
@@ -14,23 +22,6 @@ interface RadarCacheEntry {
   failedRepos: string[]
 }
 let radarCache: RadarCacheEntry | null = null
-
-/** 每日快照：记录每个 repo 每天的 stars，用于计算近 7 日增长 */
-const starHistory = new Map<string, { day: string; stars: number }[]>()
-function recordStarSnapshot(repo: string, stars: number): number | null {
-  const today = new Date().toISOString().slice(0, 10)
-  const list = starHistory.get(repo) || []
-  const last = list[list.length - 1]
-  if (!last || last.day !== today) {
-    list.push({ day: today, stars })
-    // 只保留最近 7 天
-    while (list.length > 7) list.shift()
-    starHistory.set(repo, list)
-  }
-  const oldest = list[0]
-  if (!oldest || oldest.day === today) return null
-  return stars - oldest.stars
-}
 
 function githubHeaders(): Record<string, string> {
   const h: Record<string, string> = {
@@ -148,7 +139,8 @@ export async function GET() {
     return {
       ...p,
       stars: m.stargazers_count,
-      starsDelta7d: recordStarSnapshot(p.repo, m.stargazers_count),
+      starsDelta7d: starSnapshot.record(p.repo, m.stargazers_count),
+      starHistory: starSnapshot.history(p.repo)?.slice(-7),
       forks: m.forks_count,
       openIssues: m.open_issues_count,
       language: m.language || p.language,

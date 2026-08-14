@@ -3,6 +3,8 @@
 import { NextResponse } from 'next/server'
 import { fetchTrendingRepos } from '@/lib/sources/github'
 
+export const dynamic = 'force-dynamic'
+
 let dataCache: { data: any[]; fetchedAt: number } | null = null
 const CACHE_TTL = 15 * 60 * 1000
 

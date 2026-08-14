@@ -40,6 +40,8 @@ export interface AgentRadarProject {
   stars?: number
   /** 近 7 日 star 增长（服务端每日快照），null=跟踪中 */
   starsDelta7d?: number | null
+  /** 每日快照历史（近 7 天），用于趋势展示 */
+  starHistory?: { day: string; stars: number }[]
   forks?: number
   latestRelease?: string | null
   pushedAt?: string | null
@@ -245,3 +247,32 @@ export const AGENT_RADAR_PROJECTS: AgentRadarProject[] = [
     license: 'MIT', language: 'C++',
   },
 ]
+
+/** 关注原因英文版（en locale 使用；缺省回退中文） */
+export const WHY_WATCH_EN: Record<string, string> = {
+  langgraph: 'LangChain ecosystem core; fastest platform push (studio/cloud); large community',
+  'pydantic-ai': 'Type-safe design suits engineering teams; rapid growth since 2025; top pick for enterprise Python agents',
+  langchain: 'Broadest ecosystem (thousands of integrations); mainstream LLM-app base',
+  dify: 'Most popular open platform for enterprise deployment; built-in observability & RBAC',
+  n8n: 'Extends automation into agent orchestration with MCP; check fair-code license for commercial use',
+  flowise: 'Low-code drag-and-drop for quick prototyping; fewer production-grade features',
+  autogen: 'Microsoft-backed multi-agent framework; Magentic-One research baseline',
+  crewai: 'Intuitive role-based multi-agent abstraction; high enterprise adoption',
+  metagpt: 'Influential in Chinese community; research value; limited production use',
+  mcp: 'Protocol-level standard; adopted by all major agent frameworks and platforms',
+  'mcp-servers': 'Official reference servers; the go-to starting point for MCP integration',
+  'openai-agents': 'OpenAI official SDK; deeply tied to Responses API; large ecosystem influence',
+  'llama-index': 'Deepest RAG capabilities (agentic RAG); mature docs and ecosystem',
+  qdrant: 'Leading vector DB with strong filtering and performance; hybrid cloud/self-host',
+  milvus: 'Proven at massive scale; active Chinese community',
+  mem0: 'Leading memory layer; multi-framework integrations; managed + OSS',
+  letta: 'MemGPT lineage; novel self-hosted agent server; young with few production cases',
+  'swe-bench': 'De-facto standard for coding-agent evaluation; most cited benchmark',
+  gaia: 'General AI-assistant benchmark; mixes multimodal/tool/reasoning',
+  agentbench: 'Key Chinese multi-task agent benchmark (8 task types)',
+  langfuse: 'Production-grade tracing/evals/prompt management; OTel GenAI compatible',
+  phoenix: 'Arize-backed observability + evals in one',
+  ollama: 'Default local runtime; one-command deploy; wide integration',
+  vllm: 'De-facto production inference engine; OpenAI-compatible serving',
+  llamacpp: 'GGUF local/edge inference; powers Ollama under the hood',
+}

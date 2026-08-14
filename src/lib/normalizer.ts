@@ -107,6 +107,7 @@ export function normalizeHNSignal(item: RawHNItem, locale: 'zh' | 'en'): Signal 
     importance: computeImportance(item.score, false),
     sourcesCount: Math.min(Math.ceil(item.score / 100) + 1, 10),
     language: locale,
+    providerId: 'hackernews',
   }
 }
 
@@ -125,10 +126,11 @@ export function normalizeHFPaper(paper: RawHFPaper, locale: 'zh' | 'en'): Signal
     importance: computeImportance(paper.upvotes, false),
     sourcesCount: Math.min(Math.ceil(paper.upvotes / 50) + 1, 8),
     language: locale,
+    providerId: 'huggingface',
   }
 }
 
-export function normalizeGitHubRepo(repo: RawGitHubRepo, locale: 'zh' | 'en'): Signal {
+export function normalizeGitHubRepo(repo: RawGitHubRepo, locale: 'zh' | 'en', starsDelta7d?: number | null): Signal {
   const category = classifyCategory(`${repo.name} ${repo.description || ''}`, 'github')
   return {
     id: `gh-${repo.id}`,
@@ -143,7 +145,9 @@ export function normalizeGitHubRepo(repo: RawGitHubRepo, locale: 'zh' | 'en'): S
     tags: repo.language ? [repo.language] : ['github'],
     importance: computeImportance(repo.stars / 100, false),
     sourcesCount: 1,
+    starsDelta7d,
     language: locale,
+    providerId: 'github',
   }
 }
 
@@ -162,5 +166,6 @@ export function normalizeS2Paper(paper: RawS2Paper, locale: 'zh' | 'en'): Signal
     importance: computeImportance(paper.citations / 10, false),
     sourcesCount: 1,
     language: locale,
+    providerId: 'semanticscholar',
   }
 }

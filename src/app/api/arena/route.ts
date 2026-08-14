@@ -1,23 +1,51 @@
-// /api/arena — 模型竞技场：LMArena + Artificial Analysis 双源动态抓取
-// 动态源：
-//   1. LMArena Text Arena（Elo 综合榜 / Agent 成功率榜 / 开源模型 Elo）
-//   2. Artificial Analysis（推理速度 / API 成本 / 长上下文 / 推理能力指数）
-// 降级链：live → cached（60min）→ partial（单源失败）→ static（全部失败）
+// /api/arena — 模型竞技场：Artificial Analysis 单源动态抓取（RSC JSON，服务器可达）
+// 覆盖 8 维：综合 / 编程 / Agent / 推理 / 速度 / 成本 / 上下文 / 本地部署
+// 降级链：live → cached（60min）→ static（全部失败时用 ARENA_BOARDS 人工快照 REF）
+// 注：原 LMArena 抓取因生产服务器被网络封锁（TLS 重置）不可用，故统一改用 AA 指标；
+//     维度口径随之变为 AA 指数（Intelligence/Coding/Agentic Index 等），非 LMArena Elo。
 import { NextResponse } from 'next/server'
-import { ARENA_BOARDS, type ArenaBoard, type ArenaEntry } from '@/data/arena'
+import { ARENA_BOARDS, type ArenaBoard, type ArenaDimension, type ArenaEntry } from '@/data/arena'
 import { fetchWithTimeout } from '@/lib/fetch-with-timeout'
+
+export const dynamic = 'force-dynamic'
 
 const TIMEOUT = 25000
 const CACHE_TTL = 60 * 60 * 1000
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36'
-
-const LMARENA_URL = 'https://lmarena.ai/leaderboard/text'
-const LMARENA_AGENT_URL = 'https://lmarena.ai/leaderboard/agent'
-const LMARENA_OVERVIEW_URL = 'https://lmarena.ai/leaderboard/'
 const AA_URL = 'https://artificialanalysis.ai/leaderboards/models'
 
-/** 待接入维度的统一说明 */
-const PENDING_NOTE = '暂无免凭证实时源（已尝试 LMArena 分类筛选 / SWE-bench / BFCL / SuperCLUE），待接入后自动更新'
+/* ---------- 模型名清洗与厂商推断 ---------- */
+
+/** 厂商关键词 → 展示名（长关键词优先以降低误匹配） */
+const VENDOR_MAP: [string, string][] = [
+  ['anthropic', 'Anthropic'], ['claude', 'Anthropic'],
+  ['openai', 'OpenAI'], ['gpt', 'OpenAI'], ['o1', 'OpenAI'], ['o3', 'OpenAI'], ['chatgpt', 'OpenAI'],
+  ['google', 'Google'], ['gemini', 'Google'], ['gemma', 'Google'], ['palm', 'Google'], ['bard', 'Google'],
+  ['meta', 'Meta'], ['llama', 'Meta'], ['muse', 'Meta'],
+  ['alibaba', 'Alibaba Qwen'], ['qwen', 'Alibaba Qwen'], ['tongyi', 'Alibaba Qwen'],
+  ['deepseek', 'DeepSeek'],
+  ['moonshot', 'Moonshot AI'], ['kimi', 'Moonshot AI'],
+  ['xai', 'xAI'], ['grok', 'xAI'],
+  ['mistral', 'Mistral AI'],
+  ['zhipu', 'Zhipu AI'], ['glm', 'Zhipu AI'],
+  ['bytedance', 'ByteDance'], ['doubao', 'ByteDance'], ['seed', 'ByteDance'],
+  ['minimax', 'MiniMax'],
+  ['microsoft', 'Microsoft'], ['phi', 'Microsoft'], ['copilot', 'Microsoft'],
+  ['cohere', 'Cohere'], ['command', 'Cohere'], ['aya', 'Cohere'],
+  ['huggingface', 'Hugging Face'], ['idefics', 'Hugging Face'],
+  ['baidu', 'Baidu'], ['ernie', 'Baidu'], ['wenxin', 'Baidu'],
+  ['nvidia', 'NVIDIA'], ['nemotron', 'NVIDIA'],
+  ['01', '01.AI'], ['yi-', '01.AI'],
+]
+
+/** 厂商关键词 → 展示名（inferOrg 用） */
+function inferOrg(model: string, fallback: string): string {
+  const lower = (model || '').toLowerCase()
+  for (const [kw, org] of VENDOR_MAP) {
+    if (lower.includes(kw)) return org
+  }
+  return fallback || '—'
+}
 
 interface CacheEntry {
   boards: ArenaBoard[]
@@ -25,127 +53,78 @@ interface CacheEntry {
 }
 let arenaCache: CacheEntry | null = null
 
-function clean(s: string): string {
-  return s.replace(/<[^>]+>/g, ' ')
-    .replace(/&amp;/g, '&').replace(/&#x27;/g, "'").replace(/&quot;/g, '"')
-    .replace(/&nbsp;/g, ' ').replace(/&#\d+;/g, '')
-    .replace(/\s+/g, ' ').trim()
+/* ---------- AA RSC JSON 抓取 ---------- */
+
+/** AA 页面内嵌 RSC payload 中的模型对象（只取用到的字段） */
+interface AaModel {
+  name: string
+  modelCreatorName: string | null
+  intelligenceIndex: number | null
+  codingIndex: number | null
+  agenticIndex: number | null
+  gpqa: number | null
+  medianOutputTokensPerSecond: number | null
+  price1mBlended7To2To1: number | null
+  contextWindowTokens: number | null
+  isOpenWeights: boolean | null
 }
 
-function parseContext(ctx: string): number {
-  const t = ctx.toLowerCase().replace(/,/g, '')
-  const m = t.match(/([\d.]+)\s*(m|k)?/)
-  if (!m) return 0
-  const n = parseFloat(m[1])
-  if (m[2] === 'm') return n * 1e6
-  if (m[2] === 'k') return n * 1e3
-  return n
-}
-
-function parseNum(s: string): number | null {
-  if (!s || s === '--' || s === '-' || s === '—') return null
-  const n = parseFloat(s.replace(/[$,]/g, ''))
-  return Number.isFinite(n) ? n : null
-}
-
-/** 解析 LMArena 表格 → entries（modelCol：模型列索引；scoreCol：score 列索引） */
-function parseLmarenaHtml(html: string, scoreClean: (s: string) => string, scoreCol = 3, modelCol = 2): ArenaEntry[] {
-  const trs = html.match(/<tr[^>]*>[\s\S]*?<\/tr>/g) || []
-  const entries: ArenaEntry[] = []
-  for (const tr of trs) {
-    const tds = Array.from(tr.matchAll(/<td[^>]*>[\s\S]*?<\/td>/g)).map(m => clean(m[0]))
-    if (tds.length <= Math.max(scoreCol, modelCol)) continue
-    const link = tr.match(/<a[^>]*href="[^"]*"[^>]*>([\s\S]*?)<\/a>/)
-    const modelCell = tds[modelCol] || ''
-    const model = link ? clean(link[1]) : modelCell.split('·')[0].trim()
-    if (!model || model === 'Rank') continue
-    const scoreRaw = tds[scoreCol] || ''
-    const score = scoreClean(scoreRaw)
-    if (!score) continue
-    entries.push({
-      rank: entries.length + 1,
-      model,
-      organization: modelCell.split('·')[0].trim().split(' ')[0] || '—',
-      score,
-      note: tds[4] ? `${tds[4]} votes` : undefined,
-    })
-  }
-  return entries
-}
-
-/** 抓取 LMArena Elo 榜（overall / open-source） */
-async function fetchLmarenaBoard(url: string): Promise<{ entries: ArenaEntry[]; title: string; date: string; votes: string }> {
-  const res = await fetchWithTimeout(url, { headers: { 'User-Agent': UA, 'Accept': 'text/html' } }, TIMEOUT)
-  if (!res.ok) throw new Error(`LMArena HTTP ${res.status}`)
-  const html = await res.text()
-  const entries = parseLmarenaHtml(html, (s) => {
-    const m = s.match(/([\d.]+)\s*±/)
-    return m ? `Elo ${m[1]}` : ''
-  })
-  if (entries.length === 0) throw new Error('LMArena: no rows parsed')
-  const date = (html.match(/(\w{3} \d{1,2}, \d{4})/) || [])[1] || ''
-  const votes = (html.match(/([\d,]+) votes/) || [])[1] || ''
-  const title = url.includes('license=open-source') ? '开源模型' : '综合'
-  return { entries, title, date, votes }
-}
-
-/** 抓取 LMArena Agent 榜（成功率百分比） */
-async function fetchLmarenaAgent(): Promise<{ entries: ArenaEntry[]; date: string }> {
-  const res = await fetchWithTimeout(LMARENA_AGENT_URL, { headers: { 'User-Agent': UA, 'Accept': 'text/html' } }, TIMEOUT)
-  if (!res.ok) throw new Error(`LMArena agent HTTP ${res.status}`)
-  const html = await res.text()
-  const entries = parseLmarenaHtml(html, (s) => {
-    const m = s.match(/([\d.]+) %/)
-    return m ? `${m[1]}%` : ''
-  }, 2, 1)
-  if (entries.length === 0) throw new Error('LMArena agent: no rows parsed')
-  const date = (html.match(/(\w{3} \d{1,2}, \d{4})/) || [])[1] || ''
-  return { entries: entries.slice(0, 10), date }
-}
-
-/** 解析 LMArena Text Arena Overview 表 → 各分类排名（Coding 列=4，Math 列=5） */
-async function fetchLmarenaOverview(): Promise<{ model: string; org: string; coding: number | null; math: number | null }[]> {
-  const res = await fetchWithTimeout(LMARENA_OVERVIEW_URL, { headers: { 'User-Agent': UA, 'Accept': 'text/html' } }, TIMEOUT)
-  if (!res.ok) throw new Error(`LMArena overview HTTP ${res.status}`)
-  const html = await res.text()
-  const trs = html.match(/<tr[^>]*>[\s\S]*?<\/tr>/g) || []
-  const rows: { model: string; org: string; coding: number | null; math: number | null }[] = []
-  for (const tr of trs) {
-    const cells = Array.from(tr.matchAll(/<td[^>]*>[\s\S]*?<\/td>/g)).map(m => clean(m[0]))
-    if (cells.length < 6) continue
-    const modelCell = cells[0]
-    if (!modelCell || modelCell.includes('Model') || !/\s/.test(modelCell)) continue
-    const org = modelCell.split(' ')[0] || '—'
-    const model = modelCell.replace(org, '').trim()
-    const parseRank = (s: string): number | null => {
-      const n = parseInt(s, 10)
-      return Number.isFinite(n) ? n : null
-    }
-    rows.push({ model, org, coding: parseRank(cells[4]), math: parseRank(cells[5]) })
-  }
-  if (rows.length === 0) throw new Error('LMArena overview: no rows parsed')
-  return rows
-}
-
-/** 抓取 Artificial Analysis 表格 → [模型, 上下文, 厂商, 指数, 成本, tokens/s, 延迟, 响应] */
-async function fetchAaRows(): Promise<string[][]> {
+/** 抓取 AA 排行榜 → 全量模型数组（解析 Next.js RSC payload 中的 models JSON） */
+async function fetchAaModels(): Promise<AaModel[]> {
   const res = await fetchWithTimeout(
     AA_URL,
-    { headers: { 'User-Agent': UA } },
+    { headers: { 'User-Agent': UA }, cache: 'no-store' },
     TIMEOUT,
   )
   if (!res.ok) throw new Error(`Artificial Analysis HTTP ${res.status}`)
   const html = await res.text()
-  const trs = html.match(/<tr[^>]*>[\s\S]*?<\/tr>/g) || []
-  const rows: string[][] = []
-  for (const tr of trs) {
-    const tds = Array.from(tr.matchAll(/<td[^>]*>[\s\S]*?<\/td>/g)).map(m => clean(m[0]))
-    if (tds.length >= 6 && tds[0] && tds[2] && parseNum(tds[3]) !== null) {
-      rows.push(tds.slice(0, 9))
-    }
+
+  // RSC payload 有多个 push 块，取含完整模型指标（intelligenceIndex）的那个
+  const blocks = Array.from(html.matchAll(/self\.__next_f\.push\(\[\d+,"((?:[^"\\]|\\.)*)"\]\)/g))
+  let decoded = ''
+  for (const b of blocks) {
+    const d = JSON.parse(`"${b[1]}"`) as string
+    if (d.includes('"intelligenceIndex"')) { decoded = d; break }
   }
-  if (rows.length === 0) throw new Error('Artificial Analysis: no rows parsed')
-  return rows
+  if (!decoded) throw new Error('AA: RSC payload not found')
+  const mm = decoded.match(/"models":(\[[\s\S]*?\]),"messages"/)
+  if (!mm) throw new Error('AA: models array not found in payload')
+  const models = JSON.parse(mm[1]) as AaModel[]
+
+  // 保留有用字段，剔除无指数/无名称的噪音
+  return models.filter(x => x && x.name && (x.intelligenceIndex != null || x.codingIndex != null || x.agenticIndex != null))
+}
+
+/** 按数值字段排序取前 N，构造 entries；score 由 formatter 生成 */
+function rankEntries(
+  models: AaModel[],
+  pick: (x: AaModel) => number | null,
+  formatter: (x: AaModel, v: number) => string,
+  limit = 8,
+  opts: { filter?: (x: AaModel) => boolean; ascending?: boolean } = {},
+): ArenaEntry[] {
+  const { filter, ascending } = opts
+  const list = models
+    .filter(x => (filter ? filter(x) : true) && pick(x) != null)
+    .sort((a, b) => (ascending ? (pick(a) as number) - (pick(b) as number) : (pick(b) as number) - (pick(a) as number)))
+    .slice(0, limit)
+  return list.map((x, i) => ({
+    rank: i + 1,
+    model: x.name,
+    organization: x.modelCreatorName || inferOrg(x.name, '—'),
+    score: formatter(x, pick(x) as number),
+  }))
+}
+
+function fmtContext(tokens: number): string {
+  if (tokens >= 1e6) return `${(tokens / 1e6).toFixed(1).replace(/\.0$/, '')}M`
+  if (tokens >= 1e3) return `${(tokens / 1e3).toFixed(1).replace(/\.0$/, '')}K`
+  return String(tokens)
+}
+
+/** 取静态快照中某维度的 entries，用于动态源不可达时的兜底（标注 REF） */
+function staticEntries(dimension: string): ArenaEntry[] {
+  return ARENA_BOARDS.find(b => b.dimension === dimension)?.entries ?? []
 }
 
 export async function GET() {
@@ -157,129 +136,75 @@ export async function GET() {
       fetchedAt: new Date(arenaCache.fetchedAt).toISOString(),
       boards: arenaCache.boards,
       staticBoards: ARENA_BOARDS,
-      note: '动态榜单来自 LMArena（Elo/Agent）与 Artificial Analysis；静态快照为人工核实（REF）',
+      note: '动态榜单来自 Artificial Analysis（Intelligence/Coding/Agentic Index 等）；静态快照为人工核实（REF）',
     })
   }
 
-  const [lmOverall, lmAgent, lmOpen, lmOv, aaRowsRes] = await Promise.allSettled([
-    fetchLmarenaBoard(LMARENA_URL),
-    fetchLmarenaAgent(),
-    fetchLmarenaBoard(`${LMARENA_URL}?license=open-source`),
-    fetchLmarenaOverview(),
-    fetchAaRows(),
-  ])
-  const partialSources: string[] = []
-  if (lmOverall.status === 'rejected') partialSources.push('lmarena-text')
-  if (lmAgent.status === 'rejected') partialSources.push('lmarena-agent')
-  if (lmOpen.status === 'rejected') partialSources.push('lmarena-open')
-  if (lmOv.status === 'rejected') partialSources.push('lmarena-overview')
-  if (aaRowsRes.status === 'rejected') partialSources.push('artificial-analysis')
-
-  // AA 维度
-  const aaRows = aaRowsRes.status === 'fulfilled' ? aaRowsRes.value : []
-  const toAaEntry = (r: string[], score: string, note?: string): ArenaEntry => ({ rank: 0, model: r[0], organization: r[2], score, note })
-  const aaSpeed: ArenaEntry[] = aaRows
-    .map((r) => ({ r, v: parseNum(r[5]) ?? 0 })).sort((a, b) => b.v - a.v).filter((x) => x.v > 0).slice(0, 8)
-    .map((x, i) => ({ ...toAaEntry(x.r, `${x.v.toLocaleString()} tok/s`, x.r[1]), rank: i + 1 }))
-  const aaCost: ArenaEntry[] = aaRows
-    .map((r) => ({ r, v: parseNum(r[4]) ?? -1 })).filter((x) => x.v >= 0).sort((a, b) => a.v - b.v).slice(0, 8)
-    .map((x, i) => ({ ...toAaEntry(x.r, `$${x.v.toFixed(2)}`, x.r[1]), rank: i + 1 }))
-  const aaContext: ArenaEntry[] = aaRows
-    .map((r) => ({ r, v: parseContext(r[1]) })).sort((a, b) => b.v - a.v).filter((x) => x.v > 0).slice(0, 8)
-    .map((x, i) => ({ ...toAaEntry(x.r, x.r[1], x.r[2]), rank: i + 1 }))
-
-  // LMArena Overview：Coding 排名 → 编程能力；Math 排名 → 推理能力
-  const ov = lmOv.status === 'fulfilled' ? lmOv.value : []
-  const codingRanked: ArenaEntry[] = ov
-    .filter((r) => r.coding !== null)
-    .sort((a, b) => (a.coding ?? 0) - (b.coding ?? 0))
-    .slice(0, 8)
-    .map((r, i) => ({ rank: i + 1, model: r.model, organization: r.org, score: `#${r.coding}`, note: 'LMArena Coding 分类排名' }))
-  const mathRanked: ArenaEntry[] = ov
-    .filter((r) => r.math !== null)
-    .sort((a, b) => (a.math ?? 0) - (b.math ?? 0))
-    .slice(0, 8)
-    .map((r, i) => ({ rank: i + 1, model: r.model, organization: r.org, score: `#${r.math}`, note: 'LMArena Math 分类排名' }))
-
-  const boards: ArenaBoard[] = [
-    {
-      dimension: '综合能力',
-      source: lmOverall.status === 'fulfilled' ? 'LMArena Text Arena（Elo）' : '待接入',
-      sourceUrl: LMARENA_URL,
-      date: lmOverall.status === 'fulfilled' ? lmOverall.value.date || '实时抓取' : '—',
-      methodology: '匿名盲测用户投票 Elo 评分（' + (lmOverall.status === 'fulfilled' ? `${lmOverall.value.votes} 票` : '—') + '），分数越高越强',
-      entries: lmOverall.status === 'fulfilled' ? lmOverall.value.entries : [],
-    },
-    {
-      dimension: 'Agent 工具调用',
-      source: lmAgent.status === 'fulfilled' ? 'LMArena Agent Arena' : '待接入',
-      sourceUrl: LMARENA_AGENT_URL,
-      date: lmAgent.status === 'fulfilled' ? lmAgent.value.date || '实时抓取' : '—',
-      methodology: 'Agent 任务综合成功率（%），覆盖工具调用/多步骤任务',
-      entries: lmAgent.status === 'fulfilled' ? lmAgent.value.entries : [],
-    },
-    {
-      dimension: '本地部署友好度',
-      source: lmOpen.status === 'fulfilled' ? 'LMArena 开源模型（Elo）' : '待接入',
-      sourceUrl: `${LMARENA_URL}?license=open-source`,
-      date: lmOpen.status === 'fulfilled' ? lmOpen.value.date || '实时抓取' : '—',
-      methodology: 'LMArena 开源权重模型 Elo 榜（license=open-source 筛选）',
-      entries: lmOpen.status === 'fulfilled' ? lmOpen.value.entries : [],
-    },
-    {
-      dimension: '推理速度',
-      source: 'Artificial Analysis', sourceUrl: AA_URL,
-      date: '实时抓取', methodology: 'Median output speed（tokens/s），因硬件/量化而异，仅作量级参考',
-      entries: aaSpeed,
-    },
-    {
-      dimension: 'API 成本',
-      source: 'Artificial Analysis', sourceUrl: AA_URL,
-      date: '实时抓取', methodology: 'Cost per task（美元），随厂商调价更新',
-      entries: aaCost,
-    },
-    {
-      dimension: '长上下文',
-      source: 'Artificial Analysis', sourceUrl: AA_URL,
-      date: '实时抓取', methodology: '官方上下文窗口（token），数值越大支持越长',
-      entries: aaContext,
-    },
-    {
-      dimension: '推理能力',
-      source: lmOv.status === 'fulfilled' ? 'LMArena Math 分类排名' : '待接入',
-      sourceUrl: LMARENA_OVERVIEW_URL,
-      date: '实时抓取',
-      methodology: 'LMArena Text Arena Math 分类排名（数学/推理任务盲测排名）',
-      entries: mathRanked,
-    },
-    {
-      dimension: '编程能力',
-      source: lmOv.status === 'fulfilled' ? 'LMArena Coding 分类排名' : '待接入',
-      sourceUrl: LMARENA_OVERVIEW_URL,
-      date: '实时抓取',
-      methodology: 'LMArena Text Arena Coding 分类排名（编程任务盲测排名）',
-      entries: codingRanked,
-    },
-  ]
-
-  // 全部动态源失败 → static
-  if (lmOverall.status === 'rejected' && lmAgent.status === 'rejected' && lmOpen.status === 'rejected' && lmOv.status === 'rejected' && aaRowsRes.status === 'rejected') {
+  let models: AaModel[] = []
+  try {
+    models = await fetchAaModels()
+  } catch {
+    // 全部失败 → static 快照
     return NextResponse.json({
       state: 'static',
       fetchedAt: new Date(now).toISOString(),
       boards: [],
       staticBoards: ARENA_BOARDS,
-      note: 'LMArena 与 Artificial Analysis 均暂不可达，当前仅显示静态快照（REF）',
+      note: 'Artificial Analysis 暂不可达，当前仅显示静态快照（REF）',
     })
   }
 
+  const mk = (dimension: ArenaDimension, entries: ArenaEntry[], source: string, sourceUrl: string, methodology: string): ArenaBoard => ({
+    dimension,
+    source,
+    sourceUrl,
+    date: '实时抓取',
+    methodology,
+    entries,
+  })
+
+  const boards: ArenaBoard[] = [
+    mk('综合能力',
+      rankEntries(models, x => x.intelligenceIndex, (x, v) => v.toFixed(1), 10),
+      'Artificial Analysis（Intelligence Index）', AA_URL,
+      'AA 综合智能指数（0-100），融合多任务基准，越高越强'),
+    mk('编程能力',
+      rankEntries(models, x => x.codingIndex, (x, v) => v.toFixed(1), 8),
+      'Artificial Analysis（Coding Index）', AA_URL,
+      'AA 编程指数（0-100），覆盖代码生成/修复基准'),
+    mk('Agent 工具调用',
+      rankEntries(models, x => x.agenticIndex, (x, v) => v.toFixed(1), 8),
+      'Artificial Analysis（Agentic Index）', AA_URL,
+      'AA Agent 能力指数（0-100），覆盖工具调用/多步骤任务'),
+    mk('推理能力',
+      rankEntries(models, x => x.gpqa, (x, v) => `${(v * 100).toFixed(0)}%`, 8),
+      'Artificial Analysis（GPQA）', AA_URL,
+      'GPQA 研究生级科学问答正确率（%），衡量强推理'),
+    mk('推理速度',
+      rankEntries(models, x => x.medianOutputTokensPerSecond, (x, v) => `${v.toLocaleString()} tok/s`, 8),
+      'Artificial Analysis', AA_URL,
+      'Median output speed（tokens/s），因硬件/量化而异，仅作量级参考'),
+    mk('API 成本',
+      rankEntries(models, x => x.price1mBlended7To2To1, (x, v) => `$${v.toFixed(2)}/M`, 8,
+        { filter: x => x.price1mBlended7To2To1 != null, ascending: true }),
+      'Artificial Analysis', AA_URL,
+      'Blended price per 1M tokens（7:2:1 输入输出混合），随厂商调价更新'),
+    mk('长上下文',
+      rankEntries(models, x => x.contextWindowTokens, (x, v) => fmtContext(v), 8),
+      'Artificial Analysis', AA_URL,
+      '官方上下文窗口（token），数值越大支持越长'),
+    mk('本地部署友好度',
+      rankEntries(models, x => x.intelligenceIndex, (x, v) => v.toFixed(1), 8, { filter: x => x.isOpenWeights === true }),
+      'Artificial Analysis（开源权重）', AA_URL,
+      '开源权重（open-weights）模型按 Intelligence Index 排名'),
+  ]
+
   arenaCache = { boards, fetchedAt: now }
   return NextResponse.json({
-    state: partialSources.length === 0 ? 'live' : 'partial',
+    state: 'live',
     fetchedAt: new Date(now).toISOString(),
     boards,
     staticBoards: ARENA_BOARDS,
-    partialSources,
-    note: '动态榜单来自 LMArena（Elo / Agent / 开源）与 Artificial Analysis；静态快照为人工核实（REF）',
+    note: '动态榜单来自 Artificial Analysis（Intelligence/Coding/Agentic Index 等）；静态快照为人工核实（REF）',
   })
 }

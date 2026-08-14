@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { getLocale, type Locale } from '@/lib/i18n'
 import PageHeader from '@/components/layout/PageHeader'
 import IndicatorsPanel from '@/components/IndicatorsPanel'
+import InfrastructurePanel from '@/components/InfrastructurePanel'
 
 export default function MirrorPage() {
   const [locale, setLocale] = useState<Locale>('en')
@@ -17,6 +18,7 @@ export default function MirrorPage() {
 
       <div className="px-4 pb-4 space-y-3">
         <IndicatorsPanel locale={locale} />
+        <InfrastructurePanel locale={locale} />
       </div>
     </div>
   )

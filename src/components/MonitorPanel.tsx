@@ -92,11 +92,11 @@ export default function MonitorPanel({ signals, locale }: { signals: Signal[]; l
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') addMonitor() }}
             placeholder={locale === 'zh' ? '输入关键词, 以逗号分隔...' : 'Keywords, comma-separated...'}
-            className="flex-1 bg-[#1e1e2e] border border-[#2a2a3e] rounded px-2 py-1 text-[11px] text-[#e5e5e5] placeholder-[#5c5c72] outline-none focus:border-[#06b6d4]/40"
+            className="flex-1 bg-hover border border-edge-light rounded px-2 py-1 text-[11px] text-ink placeholder-muted outline-none focus:border-[#06b6d4]/40"
           />
           <button
             onClick={addMonitor}
-            className="px-2 py-1 text-[10px] bg-[#06b6d4]/10 text-[#06b6d4] border border-[#06b6d4]/20 rounded hover:bg-[#06b6d4]/20 transition-colors"
+            className="px-2 py-1 text-[10px] bg-[#06b6d4]/10 text-accent border border-[#06b6d4]/20 rounded hover:bg-[#06b6d4]/20 transition-colors"
           >
             {locale === 'zh' ? '添加' : 'Add'}
           </button>
@@ -129,22 +129,22 @@ export default function MonitorPanel({ signals, locale }: { signals: Signal[]; l
                     href={signal.sourceUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-[#e5e5e5] hover:text-[#06b6d4] transition-colors line-clamp-1"
+                    className="text-ink hover:text-accent transition-colors line-clamp-1"
                   >
                     {signal.title}
                   </a>
-                  <span className="text-[#5c5c72]">{signal.source}</span>
+                  <span className="text-muted">{signal.source}</span>
                 </div>
               </div>
             ))}
           </div>
         ) : monitors.length > 0 ? (
-          <div className="text-[10px] text-[#5c5c72] py-4 text-center">
+          <div className="text-[10px] text-muted py-4 text-center">
             {locale === 'zh' ? '暂无匹配信号' : 'No matching signals'}
           </div>
         ) : (
           <div className="py-2 space-y-2">
-            <div className="text-[10px] text-[#5c5c72] text-center">
+            <div className="text-[10px] text-muted text-center">
               {locale === 'zh' ? '热门关键词 · 点击快速添加' : 'Trending keywords · click to add'}
             </div>
             <div className="flex flex-wrap gap-1 justify-center">
@@ -157,7 +157,7 @@ export default function MonitorPanel({ signals, locale }: { signals: Signal[]; l
                     setMonitors(updated)
                     saveMonitors(updated)
                   }}
-                  className="px-2 py-0.5 text-[9px] rounded border border-[#2a2a3e] text-[#8b8ba0] hover:text-[#06b6d4] hover:border-[#06b6d4]/30 transition-colors"
+                  className="px-2 py-0.5 text-[9px] rounded border border-edge-light text-ink-2 hover:text-accent hover:border-[#06b6d4]/30 transition-colors"
                 >
                   + {kw}
                 </button>

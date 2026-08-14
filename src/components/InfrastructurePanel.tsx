@@ -51,7 +51,7 @@ export default function InfrastructurePanel({ locale }: { locale: Locale }) {
       collapsible
     >
       <div className="overflow-y-auto">
-        <div className="px-3 py-1.5 text-[9px] text-[#5c5c72] uppercase tracking-[0.08em] border-b border-[#1e1e2e]">
+        <div className="px-3 py-1.5 text-[9px] text-muted uppercase tracking-[0.08em] border-b border-edge">
           {locale === 'zh' ? `共 ${sorted.length} 个项目` : `${sorted.length} facilities`}
         </div>
         {sorted.map((item) => {
@@ -62,30 +62,30 @@ export default function InfrastructurePanel({ locale }: { locale: Locale }) {
           return (
             <div
               key={item.id}
-              className="grid grid-cols-[1fr_auto] items-center gap-x-3 px-3 py-1.5 border-b border-[#1e1e2e]/50 hover:bg-[#16162a] transition-colors"
+              className="grid grid-cols-[1fr_auto] items-center gap-x-3 px-3 py-1.5 border-b border-edge-50 hover:bg-hover transition-colors"
             >
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] text-[#e5e5e5] truncate">{name}</span>
-                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#1e1e2e] text-[#8b8ba0] font-mono">
+                  <span className="text-[10px] text-ink truncate">{name}</span>
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-hover text-ink-2 font-mono">
                     {typeLabel}
                   </span>
                 </div>
-                <div className="text-[9px] text-[#5c5c72] mt-0.5">{item.operator}</div>
+                <div className="text-[9px] text-muted mt-0.5">{item.operator}</div>
               </div>
               <div className="text-right">
                 <div className="flex items-center gap-2">
                   <div className="text-right">
-                    <div className="text-[10px] font-mono tabular-nums text-[#06b6d4]">
+                    <div className="text-[10px] font-mono tabular-nums text-accent">
                       {formatGPUCount(item.gpuCount)} GPUs
                     </div>
-                    <div className="text-[9px] text-[#8b8ba0] font-mono tabular-nums">
+                    <div className="text-[9px] text-ink-2 font-mono tabular-nums">
                       {item.powerMW}MW
                     </div>
                   </div>
                   <div className="flex flex-col items-center gap-0.5">
                     <span className={`w-1.5 h-1.5 rounded-full ${STATUS_COLOR[item.status]}`} />
-                    <span className="text-[8px] text-[#5c5c72]">{statusLabel}</span>
+                    <span className="text-[8px] text-muted">{statusLabel}</span>
                   </div>
                 </div>
               </div>
@@ -94,18 +94,18 @@ export default function InfrastructurePanel({ locale }: { locale: Locale }) {
         })}
 
         {/* Totals */}
-        <div className="grid grid-cols-2 gap-2 px-3 py-2 bg-[#0c0c14] border-t border-[#1e1e2e]">
+        <div className="grid grid-cols-2 gap-2 px-3 py-2 bg-sidebar border-t border-edge">
           <div className="text-center">
-            <div className="text-[11px] font-bold font-mono tabular-nums text-[#06b6d4]">
+            <div className="text-[11px] font-bold font-mono tabular-nums text-accent">
               {formatGPUCount(totals.gpus)}
             </div>
-            <div className="text-[9px] text-[#5c5c72]">{locale === 'zh' ? '总算力' : 'Total GPUs'}</div>
+            <div className="text-[9px] text-muted">{locale === 'zh' ? '总算力' : 'Total GPUs'}</div>
           </div>
           <div className="text-center">
             <div className="text-[11px] font-bold font-mono tabular-nums text-[#f59e0b]">
               {totals.power}MW
             </div>
-            <div className="text-[9px] text-[#5c5c72]">{locale === 'zh' ? '总功耗' : 'Total Power'}</div>
+            <div className="text-[9px] text-muted">{locale === 'zh' ? '总功耗' : 'Total Power'}</div>
           </div>
         </div>
       </div>

@@ -39,6 +39,7 @@ export async function fetchLatestPapers(limit = 7): Promise<RawS2Paper[]> {
 export const semanticscholarProvider: SignalProvider = {
   id: 'semanticscholar',
   name: 'Semantic Scholar',
+  pollIntervalMs: 10 * 60 * 1000,
   async fetchSignals(locale) {
     const papers = await fetchLatestPapers(10)
     const signals: Signal[] = []

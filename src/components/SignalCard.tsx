@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import type { CardSignal } from '@/types/signal'
-import { t, type Locale } from '@/lib/i18n'
+import type { Locale } from '@/lib/i18n'
 
 interface Props { signal: CardSignal; locale: Locale; onClick?: () => void }
 
@@ -20,6 +20,14 @@ const CATEGORY_TEXT: Record<string, string> = {
   industry: 'text-amber-400/70',
   papers: 'text-emerald-400/70',
   tips: 'text-rose-400/70',
+}
+
+const CATEGORY_FILTER: Record<string, [zh: string, en: string]> = {
+  models: ['模型军备', 'Model Arms'],
+  products: ['应用落地', 'Deployment'],
+  industry: ['产业格局', 'Landscape'],
+  papers: ['学术前沿', 'Frontier'],
+  tips: ['工程实战', 'Engineering'],
 }
 
 function sourceLabel(signal: CardSignal): string {
@@ -49,7 +57,7 @@ export default function SignalCard({ signal, locale, onClick }: Props) {
   useEffect(() => { setMounted(true) }, [])
 
   return (
-      <div className={`h-full flex flex-col group relative bg-[#12121a] border border-[#1e1e2e] rounded-lg transition-all duration-200 hover:bg-[#16162a] hover:border-[#06b6d4]/20 hover:shadow-[0_0_15px_rgba(6,182,212,0.06)] ${onClick ? 'cursor-pointer' : 'cursor-default'} ${isHigh ? 'ring-1 ring-[#06b6d4]/5' : ''}`}
+      <div className={`h-full flex flex-col group relative bg-card border border-edge rounded-lg transition-all duration-200 hover:bg-hover hover:border-[#06b6d4]/20 hover:shadow-[0_0_15px_rgba(6,182,212,0.06)] ${onClick ? 'cursor-pointer' : 'cursor-default'} ${isHigh ? 'ring-1 ring-[#06b6d4]/5' : ''}`}
         onClick={onClick}>
       {/* Category bar */}
       <div className={`absolute top-0 left-0 w-full h-0.5 rounded-t-lg ${accent.bar} ${isHigh ? 'opacity-100' : 'opacity-40 group-hover:opacity-70'} transition-opacity`} />
@@ -57,7 +65,7 @@ export default function SignalCard({ signal, locale, onClick }: Props) {
       {/* Header */}
       <div className="p-3.5 pb-0 flex-1">
         <div className="flex items-start justify-between gap-2 mb-2">
-          <h3 className={`text-sm font-medium leading-snug ${isHigh ? 'text-[#e5e5e5]' : 'text-[#c8c8d0]'} group-hover:text-[#06b6d4] transition-colors line-clamp-2`}>
+          <h3 className={`text-sm font-medium leading-snug ${isHigh ? 'text-ink' : 'text-ink-2'} group-hover:text-accent transition-colors line-clamp-2`}>
             {signal.title}
           </h3>
           {isCluster && (
@@ -66,36 +74,38 @@ export default function SignalCard({ signal, locale, onClick }: Props) {
             </span>
           )}
           {isHigh && (
-            <span className="shrink-0 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider rounded bg-[#06b6d4]/10 text-[#06b6d4] border border-[#06b6d4]/15 animate-pulse-slow">
-              {t('signal.new', locale)}
+            <span className="shrink-0 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider rounded bg-[#06b6d4]/10 text-accent border border-[#06b6d4]/15 animate-pulse-slow">
+              {locale === 'zh' ? '新' : 'New'}
             </span>
           )}
         </div>
 
-        <p className="text-xs text-[#6c6c82] leading-relaxed line-clamp-2 mb-2.5">
+        <p className="text-xs text-muted leading-relaxed line-clamp-2 mb-2.5">
           {signal.summary}
         </p>
       </div>
 
       {/* Meta row */}
       <div className="px-3.5 pb-3.5">
-        <div className="flex items-center gap-2 flex-wrap text-[10px] text-[#5c5c72]">
+        <div className="flex items-center gap-2 flex-wrap text-[10px] text-muted">
           {/* Source */}
-          <span className="font-medium text-[#06b6d4]/60">{sourceLabel(signal)}</span>
-          <span className="w-0.5 h-0.5 rounded-full bg-[#1e1e2e]" />
+          <span className="font-medium text-accent-60">{sourceLabel(signal)}</span>
+          <span className="w-0.5 h-0.5 rounded-full bg-edge" />
           {/* Time */}
           <span className="font-mono">{mounted ? timeAgo(signal.publishedAt) : '--'}</span>
-          <span className="w-0.5 h-0.5 rounded-full bg-[#1e1e2e]" />
+          <span className="w-0.5 h-0.5 rounded-full bg-edge" />
           {/* Category tag */}
-          <span className={CATEGORY_TEXT[signal.category] || 'text-gray-400/70'}>{t(`filter.${signal.category}`, locale)}</span>
+          <span className={CATEGORY_TEXT[signal.category] || 'text-gray-400/70'}>
+            {CATEGORY_FILTER[signal.category]?.[locale === 'zh' ? 0 : 1] ?? signal.category}
+          </span>
 
           <span className="flex-1" />
 
           {/* Sources count badge */}
           {displaySourceCount > 1 && (
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#06b6d4]/5 text-[#06b6d4]/80 text-[9px] font-medium border border-[#06b6d4]/10">
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#06b6d4]/5 text-accent-80 text-[9px] font-medium border border-[#06b6d4]/10">
               <span>{displaySourceCount}</span>
-              <span>{t('signal.sourcesCount', locale)}</span>
+              <span>{locale === 'zh' ? '个信源' : 'sources'}</span>
             </span>
           )}
         </div>
@@ -110,7 +120,7 @@ export default function SignalCard({ signal, locale, onClick }: Props) {
                   ? signal.importance >= 4
                     ? 'bg-gradient-to-r from-[#06b6d4] to-[#0891b2]'
                     : 'bg-[#06b6d4]/40'
-                  : 'bg-[#1e1e2e]'
+                  : 'bg-hover'
               }`}
             />
           ))}

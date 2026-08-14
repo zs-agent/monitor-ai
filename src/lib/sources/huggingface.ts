@@ -8,6 +8,7 @@ const TIMEOUT = 8000
 export const huggingfaceProvider: SignalProvider = {
   id: 'huggingface',
   name: 'HuggingFace Papers',
+  pollIntervalMs: 10 * 60 * 1000,
   async fetchSignals(locale) {
     const res = await fetchWithTimeout('https://huggingface.co/api/daily_papers', {}, TIMEOUT)
     if (!res.ok) throw new Error(`HF daily_papers HTTP ${res.status}`)

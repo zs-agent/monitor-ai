@@ -77,8 +77,8 @@ export default function CompanyRadar({ locale, signals }: Props) {
       {rows.length === 0 ? (
         <div className="flex items-center justify-center h-32">
           <div className="text-center">
-            <div className="text-2xl text-[#1e1e2e] mb-2">◇</div>
-            <p className="text-[11px] text-[#5c5c72]">{isZh ? '暂无厂商信号' : 'No vendor signals'}</p>
+            <div className="text-2xl text-dim mb-2">◇</div>
+            <p className="text-[11px] text-muted">{isZh ? '暂无厂商信号' : 'No vendor signals'}</p>
           </div>
         </div>
       ) : (
@@ -87,7 +87,7 @@ export default function CompanyRadar({ locale, signals }: Props) {
             <div className="flex justify-end">
               <button
                 onClick={() => setShowAllVendors(!showAllVendors)}
-                className="text-[10px] text-[#06b6d4]/60 hover:text-[#06b6d4] transition-colors"
+                className="text-[10px] text-accent-60 hover:text-accent transition-colors"
               >
                 {showAllVendors
                   ? (isZh ? '收起' : 'Show less')
@@ -101,21 +101,21 @@ export default function CompanyRadar({ locale, signals }: Props) {
             const trendFlat = r.delta === 0
             return (
               <div key={r.id} className="flex items-center gap-2 group" title={r.topTitle}>
-                <span className="text-[9px] font-mono w-3 text-center text-[#3c3c52]">{i + 1}</span>
+                <span className="text-[9px] font-mono w-3 text-center text-dim">{i + 1}</span>
                 <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: r.color }} />
-                <span className="text-[10px] text-[#8b8ba0] w-[72px] truncate shrink-0 group-hover:text-[#e5e5e5] transition-colors">
+                <span className="text-[10px] text-ink-2 w-[72px] truncate shrink-0 group-hover:text-ink transition-colors">
                   {isZh ? r.nameZh : r.name}
                 </span>
-                <div className="flex-1 h-2 bg-[#1e1e2e] rounded-full overflow-hidden min-w-0">
+                <div className="flex-1 h-2 bg-hover rounded-full overflow-hidden min-w-0">
                   <div
                     className="h-full rounded-full transition-all duration-500"
                     style={{ width: `${pct}%`, background: `linear-gradient(90deg, ${r.color}55, ${r.color})` }}
                   />
                 </div>
-                <span className="text-[10px] font-mono text-[#e5e5e5] w-5 text-right shrink-0">{r.total}</span>
+                <span className="text-[10px] font-mono text-ink w-5 text-right shrink-0">{r.total}</span>
                 <span
                   className={`text-[9px] font-mono w-8 text-right shrink-0 ${
-                    trendFlat ? 'text-[#5c5c72]' : trendUp ? 'text-[#34d399]' : 'text-[#ff4444]'
+                    trendFlat ? 'text-muted' : trendUp ? 'text-[#34d399]' : 'text-[#ff4444]'
                   }`}
                 >
                   {trendFlat ? '—' : `${trendUp ? '▲' : '▼'}${Math.abs(r.delta)}`}
@@ -126,7 +126,7 @@ export default function CompanyRadar({ locale, signals }: Props) {
         </div>
       )}
 
-      <div className="flex items-center gap-2 mt-2 pt-2 border-t border-[#1e1e2e]/50 text-[10px] text-[#5c5c72]">
+      <div className="flex items-center gap-2 mt-2 pt-2 border-t border-edge-50 text-[10px] text-muted">
         <span>{isZh ? '按提及量排序' : 'Ranked by mentions'}</span>
         <span className="flex-1" />
         <span className="text-[#34d399]">▲</span>

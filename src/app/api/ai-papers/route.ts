@@ -3,6 +3,8 @@
 import { NextResponse } from 'next/server'
 import { fetchLatestPapers } from '@/lib/sources/semanticscholar'
 
+export const dynamic = 'force-dynamic'
+
 let dataCache: { data: any[]; fetchedAt: number } | null = null
 const CACHE_TTL = 30 * 60 * 1000
 

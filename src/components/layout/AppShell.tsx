@@ -1,18 +1,23 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { usePathname } from 'next/navigation'
 import { getLocale, type Locale } from '@/lib/i18n'
 import Sidebar from './Sidebar'
 import CommandPalette from '@/components/CommandPalette'
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const [locale, setLocale] = useState<Locale>('en')
+  const pathname = usePathname()
 
   useEffect(() => {
     setLocale(getLocale())
     // 同步 <html lang>，避免 layout 中 lang 硬编码
     document.documentElement.lang = getLocale() === 'zh' ? 'zh-CN' : 'en'
   }, [])
+
+  // 根路径 / 是独立系统首页（landing），不套仪表盘侧边栏
+  if (pathname === '/') return <>{children}</>
 
   const handleLocaleChange = (l: Locale) => {
     setLocale(l)
@@ -24,7 +29,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar locale={locale} onLocaleChange={handleLocaleChange} />
-      <main className="flex-1 overflow-y-auto bg-[var(--bg-primary)] main-content">{children}</main>
+      <main className="flex-1 overflow-y-auto bg-base main-content pt-11 lg:pt-0">{children}</main>
       <CommandPalette locale={locale} />
     </div>
   )

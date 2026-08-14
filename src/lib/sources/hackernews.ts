@@ -34,6 +34,7 @@ async function fetchItem(id: number): Promise<RawHNItem | null> {
 export const hackernewsProvider: SignalProvider = {
   id: 'hackernews',
   name: 'Hacker News',
+  pollIntervalMs: 90 * 1000,
   async fetchSignals(locale) {
     const res = await fetchWithTimeout(`${HN_API}/topstories.json`, {}, PER_REQUEST_TIMEOUT)
     if (!res.ok) throw new Error(`HN topstories HTTP ${res.status}`)

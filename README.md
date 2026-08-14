@@ -17,6 +17,20 @@ Data flow: each source is wrapped as a `SignalProvider` (`src/lib/sources/`). Th
 2. **Stale cache** if all providers fail (up to 5 min old)
 3. **Mock data** only as last resort (tagged with `"fallback": "mock"` in response)
 
+### Background polling (tiered)
+
+After the first request, `src/lib/poller.ts` starts a per-process background poller that refreshes snapshots at per-provider intervals (`pollIntervalMs`) and persists them to `data/signals-snapshot.json` (restart-safe). Requests then mostly hit the fresh in-memory snapshot with **zero network I/O** (`"cached": true`):
+
+| Provider | Interval | Rationale |
+|----------|----------|-----------|
+| `hackernews` | 90s | High-frequency news feed |
+| `rsshub` | 5min | Self-hosted instance, moderate cost |
+| `huggingface` | 10min | Daily papers change slowly |
+| `github` | 10min | Avoid unauthenticated API rate limit (60 req/hr) |
+| `semanticscholar` | 10min | Paper search, slow-moving |
+
+Tiered refresh merges only the polled providers into the snapshot (others kept as-is). Requires a long-running Node process (`next start` / `start:prod`); **not supported on serverless platforms** — there the endpoint still falls back to on-demand fetching.
+
 Explicit mock mode: `?mock=1` on `/api/signals` returns only mock data for debugging.
 
 ## Environment Variables
@@ -25,6 +39,10 @@ Explicit mock mode: `?mock=1` on `/api/signals` returns only mock data for debug
 |----------|----------|-------------|
 | `GITHUB_TOKEN` | No | GitHub personal access token (increases API rate limit from 60 to 5000 req/hr) |
 | `NEXT_PUBLIC_API_URL` | No | API base URL (defaults to same origin) |
+| `RSSHUB_BASE_URL` | No | Self-hosted RSSHub instance URL (e.g. `http://127.0.0.1:1200`). Do not use the public `rsshub.app`. When unset, the `rsshub` source is skipped with a health error |
+| `OPENAI_API_KEY` | No | OpenAI-compatible API key for AI Insights (default provider: DeepSeek). When unset, insights degrade to statistics-only |
+| `OPENAI_BASE_URL` | No | OpenAI-compatible API base URL (default `https://api.deepseek.com`) |
+| `MODEL_NAME` | No | Model ID for AI Insights (default `deepseek-chat`) |
 
 For deploy scripts, set these environment variables instead of hardcoding credentials:
 

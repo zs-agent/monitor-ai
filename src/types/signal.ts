@@ -14,6 +14,10 @@ export interface Signal {
   importance: number
   sourcesCount: number
   language: 'zh' | 'en'
+  /** 来源 provider 唯一标识（如 'hackernews'），用于后台分级轮询时合并快照 */
+  providerId?: string
+  /** GitHub 信号：近 7 日 star 增量（+N/week），无数据时为 null */
+  starsDelta7d?: number | null
 }
 
 export type CardSignal = Signal | import('@/lib/clustering').ClusteredSignal

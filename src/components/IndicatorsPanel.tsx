@@ -153,28 +153,28 @@ export default function IndicatorsPanel({ locale }: Props) {
         <div className="relative" ref={searchRef}>
           <button
             onClick={() => setShowSearch(!showSearch)}
-            className="text-[11px] bg-[#1a1a2e] border border-[#2a2a3e] rounded px-2 py-1.5 text-[#e5e5e5] hover:border-[#06b6d4] transition-colors min-w-[200px] text-left"
+            className="text-[11px] bg-elevated border border-edge-light rounded px-2 py-1.5 text-ink hover:border-[#06b6d4] transition-colors min-w-[200px] text-left"
           >
             {meta?.name || indicator}
           </button>
           {showSearch && (
-            <div className="absolute top-full left-0 mt-1 w-[320px] bg-[#12121a] border border-[#2a2a3e] rounded shadow-xl z-50 max-h-[280px] overflow-y-auto">
+            <div className="absolute top-full left-0 mt-1 w-[320px] bg-card border border-edge-light rounded shadow-xl z-50 max-h-[280px] overflow-y-auto">
               <input
                 type="text"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 placeholder={T('搜索指标...', 'Search indicators...', locale)}
-                className="w-full px-2 py-1.5 text-[11px] bg-[#0a0a0f] border-b border-[#2a2a3e] text-[#e5e5e5] outline-none"
+                className="w-full px-2 py-1.5 text-[11px] bg-base border-b border-edge-light text-ink outline-none"
                 autoFocus
               />
               {searchResults.map(ind => (
                 <button
                   key={ind.id}
                   onClick={() => { setSelectedIndicator(ind); setShowSearch(false); setSearchQuery('') }}
-                  className={`w-full text-left px-2 py-1.5 text-[11px] hover:bg-[#1a1a2e] transition-colors ${indicator === ind.id ? 'text-[#06b6d4]' : 'text-[#8b8ba0]'}`}
+                  className={`w-full text-left px-2 py-1.5 text-[11px] hover:bg-elevated transition-colors ${indicator === ind.id ? 'text-accent' : 'text-ink-2'}`}
                 >
                   <div className="font-medium">{ind.name}</div>
-                  <div className="text-[9px] text-[#5c5c72]">{ind.id}</div>
+                  <div className="text-[9px] text-muted">{ind.id}</div>
                 </button>
               ))}
             </div>
@@ -189,8 +189,8 @@ export default function IndicatorsPanel({ locale }: Props) {
               onClick={() => toggleCountry(c.code)}
               className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors ${
                 selectedCountries.includes(c.code)
-                  ? 'bg-[#06b6d4]/20 border-[#06b6d4] text-[#06b6d4]'
-                  : 'bg-[#1a1a2e] border-[#2a2a3e] text-[#5c5c72] hover:border-[#5c5c72]'
+                  ? 'bg-[#06b6d4]/20 border-[#06b6d4] text-accent'
+                  : 'bg-elevated border-edge-light text-muted hover:border-muted'
               }`}
             >
               {locale === 'zh' ? c.nameZh : c.name}
@@ -199,7 +199,7 @@ export default function IndicatorsPanel({ locale }: Props) {
         </div>
 
         {/* Year Range */}
-        <div className="flex items-center gap-1.5 text-[10px] text-[#5c5c72]">
+        <div className="flex items-center gap-1.5 text-[10px] text-muted">
           <span>{T('年份', 'Year', locale)}:</span>
           <input
             type="number"
@@ -207,7 +207,7 @@ export default function IndicatorsPanel({ locale }: Props) {
             max={CURRENT_YEAR}
             value={yearStart}
             onChange={e => { const v = parseInt(e.target.value); if (v >= 1990 && v <= yearEnd) setYearStart(v) }}
-            className="w-14 bg-[#1a1a2e] border border-[#2a2a3e] rounded px-1.5 py-0.5 text-[#e5e5e5] text-[10px] outline-none"
+            className="w-14 bg-elevated border border-edge-light rounded px-1.5 py-0.5 text-ink text-[10px] outline-none"
           />
           <span>—</span>
           <input
@@ -216,45 +216,45 @@ export default function IndicatorsPanel({ locale }: Props) {
             max={CURRENT_YEAR}
             value={yearEnd}
             onChange={e => { const v = parseInt(e.target.value); if (v >= yearStart && v <= CURRENT_YEAR) setYearEnd(v) }}
-            className="w-14 bg-[#1a1a2e] border border-[#2a2a3e] rounded px-1.5 py-0.5 text-[#e5e5e5] text-[10px] outline-none"
+            className="w-14 bg-elevated border border-edge-light rounded px-1.5 py-0.5 text-ink text-[10px] outline-none"
           />
         </div>
       </div>
 
       {/* Indicator Metadata Row */}
       {meta && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mb-3 text-[10px] bg-[#12121a] rounded p-2 border border-[#1e1e2e]">
-          <div><span className="text-[#5c5c72]">{T('指标', 'Indicator', locale)}</span><br /><span className="text-[#e5e5e5]">{meta.name}</span></div>
-          <div><span className="text-[#5c5c72]">{T('代码', 'Code', locale)}</span><br /><span className="text-[#e5e5e5]">{meta.id}</span></div>
-          <div><span className="text-[#5c5c72]">{T('来源', 'Source', locale)}</span><br /><span className="text-[#e5e5e5]">{meta.sourceOrganization}</span></div>
-          <div><span className="text-[#5c5c72]">{T('单位', 'Unit', locale)}</span><br /><span className="text-[#e5e5e5]">{meta.unit || '—'}</span></div>
-          <div><span className="text-[#5c5c72]">{T('年份', 'Year Range', locale)}</span><br /><span className="text-[#e5e5e5]">{yearStart}–{yearEnd}</span></div>
-          <div><span className="text-[#5c5c72]">{T('更新', 'Updated', locale)}</span><br /><span className="text-[#e5e5e5]">{data?.fetchedAt?.slice(0, 10) || '—'}</span></div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mb-3 text-[10px] bg-card rounded p-2 border border-edge">
+          <div><span className="text-muted">{T('指标', 'Indicator', locale)}</span><br /><span className="text-ink">{meta.name}</span></div>
+          <div><span className="text-muted">{T('代码', 'Code', locale)}</span><br /><span className="text-ink">{meta.id}</span></div>
+          <div><span className="text-muted">{T('来源', 'Source', locale)}</span><br /><span className="text-ink">{meta.sourceOrganization}</span></div>
+          <div><span className="text-muted">{T('单位', 'Unit', locale)}</span><br /><span className="text-ink">{meta.unit || '—'}</span></div>
+          <div><span className="text-muted">{T('年份', 'Year Range', locale)}</span><br /><span className="text-ink">{yearStart}–{yearEnd}</span></div>
+          <div><span className="text-muted">{T('更新', 'Updated', locale)}</span><br /><span className="text-ink">{data?.fetchedAt?.slice(0, 10) || '—'}</span></div>
         </div>
       )}
 
       {/* Map + Chart Row */}
       <div className="grid grid-cols-1 lg:grid-cols-[2fr_3fr] gap-3 mb-3">
         {/* Simple Map: colored circles by country */}
-        <div className="bg-[#0c0c14] rounded border border-[#1e1e2e] p-2 min-h-[200px] relative">
-          <div className="text-[10px] font-semibold text-[#5c5c72] uppercase tracking-wider mb-2">{T('国家分布', 'Country Distribution', locale)}</div>
+        <div className="bg-sidebar rounded border border-edge p-2 min-h-[200px] relative">
+          <div className="text-[10px] font-semibold text-muted uppercase tracking-wider mb-2">{T('国家分布', 'Country Distribution', locale)}</div>
           <div className="flex flex-wrap gap-2">
             {selectedCountries.map(code => {
               const lastVal = data?.values?.filter(v => v.country === code && v.value !== null).sort((a, b) => b.year - a.year)[0]
               return (
-                <div key={code} className="flex-1 min-w-[120px] bg-[#12121a] rounded p-2 border border-[#1e1e2e]">
+                <div key={code} className="flex-1 min-w-[120px] bg-card rounded p-2 border border-edge">
                   <div className="flex items-center gap-1.5 mb-1">
-                    <span className="text-[11px] font-medium text-[#e5e5e5]">{countryNameMap[code] || code}</span>
+                    <span className="text-[11px] font-medium text-ink">{countryNameMap[code] || code}</span>
                   </div>
-                  <div className="text-[20px] font-light text-[#06b6d4]">
+                  <div className="text-[20px] font-light text-accent">
                     {lastVal ? fmt(lastVal.value, meta?.unit || '') : '—'}
                   </div>
-                  <div className="text-[9px] text-[#5c5c72]">
+                  <div className="text-[9px] text-muted">
                     {lastVal ? `${T('最新', 'Latest', locale)}: ${lastVal.year}` : T('无数据', 'No data', locale)}
                   </div>
                   {/* Value bar */}
                   {lastVal?.value !== null && lastVal?.value !== undefined && (
-                    <div className="mt-1 h-1 bg-[#1e1e2e] rounded-full overflow-hidden">
+                    <div className="mt-1 h-1 bg-hover rounded-full overflow-hidden">
                       <div
                         className="h-full bg-[#06b6d4] rounded-full transition-all"
                         style={{ width: `${((lastVal.value as number) / maxVal) * 100}%` }}
@@ -268,25 +268,25 @@ export default function IndicatorsPanel({ locale }: Props) {
         </div>
 
         {/* Trend Chart */}
-        <div className="bg-[#0c0c14] rounded border border-[#1e1e2e] p-2 min-h-[200px]">
-          <div className="text-[10px] font-semibold text-[#5c5c72] uppercase tracking-wider mb-2 flex items-center justify-between">
+        <div className="bg-sidebar rounded border border-edge p-2 min-h-[200px]">
+          <div className="text-[10px] font-semibold text-muted uppercase tracking-wider mb-2 flex items-center justify-between">
             <span>{T('趋势', 'Trend', locale)}</span>
-            {chartLoading && <span className="text-[9px] text-[#06b6d4] animate-pulse">{T('加载中...', 'Loading...', locale)}</span>}
+            {chartLoading && <span className="text-[9px] text-accent animate-pulse">{T('加载中...', 'Loading...', locale)}</span>}
             {chartError && !chartLoading && (
-              <button onClick={fetchData} className="text-[9px] text-[#f59e0b] hover:text-[#06b6d4] transition-colors">
+              <button onClick={fetchData} className="text-[9px] text-[#f59e0b] hover:text-accent transition-colors">
                 {T('重试', 'Retry', locale)}
               </button>
             )}
           </div>
           {chartError ? (
-            <div className="flex flex-col items-center justify-center h-[220px] text-[11px] text-[#5c5c72]">
+            <div className="flex flex-col items-center justify-center h-[220px] text-[11px] text-muted">
               <span className="text-[#f59e0b] mb-1">{chartError}</span>
-              <button onClick={fetchData} className="text-[#06b6d4] hover:text-[#0891b2] transition-colors text-[10px]">
+              <button onClick={fetchData} className="text-accent hover:text-accent-dim transition-colors text-[10px]">
                 {T('点击重试', 'Click to retry', locale)}
               </button>
             </div>
           ) : chartLoading ? (
-            <div className="flex items-center justify-center h-[220px] text-[11px] text-[#5c5c72]">
+            <div className="flex items-center justify-center h-[220px] text-[11px] text-muted">
               <span className="animate-pulse">{T('正在获取全球数据...', 'Fetching global data...', locale)}</span>
             </div>
           ) : chartData.length > 0 ? (
@@ -318,7 +318,7 @@ export default function IndicatorsPanel({ locale }: Props) {
               </LineChart>
             </ResponsiveContainer>
           ) : (
-            <div className="flex items-center justify-center h-[220px] text-[11px] text-[#5c5c72]">
+            <div className="flex items-center justify-center h-[220px] text-[11px] text-muted">
               {T('选择指标和国家以查看趋势', 'Select indicator and countries to view trend', locale)}
             </div>
           )}
@@ -326,14 +326,14 @@ export default function IndicatorsPanel({ locale }: Props) {
       </div>
 
       {/* Table + Download */}
-      <div className="bg-[#0c0c14] rounded border border-[#1e1e2e] p-2">
+      <div className="bg-sidebar rounded border border-edge p-2">
         <div className="flex items-center justify-between mb-2">
-          <div className="text-[10px] font-semibold text-[#5c5c72] uppercase tracking-wider">
+          <div className="text-[10px] font-semibold text-muted uppercase tracking-wider">
             {T('国家对比表', 'Country Comparison', locale)}
           </div>
           <button
             onClick={downloadCSV}
-            className="text-[10px] px-2 py-0.5 bg-[#1a1a2e] border border-[#2a2a3e] rounded text-[#8b8ba0] hover:text-[#06b6d4] hover:border-[#06b6d4] transition-colors"
+            className="text-[10px] px-2 py-0.5 bg-elevated border border-edge-light rounded text-ink-2 hover:text-accent hover:border-[#06b6d4] transition-colors"
           >
             {T('下载 CSV', 'Download CSV', locale)}
           </button>
@@ -341,9 +341,9 @@ export default function IndicatorsPanel({ locale }: Props) {
         <div className="overflow-x-auto">
           <table className="w-full text-[10px]">
             <thead>
-              <tr className="border-b border-[#1e1e2e]">
-                <th className="text-left py-1 pr-2 text-[#5c5c72] font-medium">{T('国家', 'Country', locale)}</th>
-                {years.map(y => <th key={y} className="text-right py-1 px-1.5 text-[#5c5c72] font-medium">{y}</th>)}
+              <tr className="border-b border-edge">
+                <th className="text-left py-1 pr-2 text-muted font-medium">{T('国家', 'Country', locale)}</th>
+                {years.map(y => <th key={y} className="text-right py-1 px-1.5 text-muted font-medium">{y}</th>)}
               </tr>
             </thead>
             <tbody>
@@ -351,10 +351,10 @@ export default function IndicatorsPanel({ locale }: Props) {
                 const countryVals = data?.values?.filter(v => v.country === code) || []
                 const valMap = new Map(countryVals.map(v => [v.year, v.value]))
                 return (
-                  <tr key={code} className="border-b border-[#1e1e2e]/50 hover:bg-[#12121a] transition-colors">
-                    <td className="py-1 pr-2 text-[#e5e5e5] font-medium">{countryNameMap[code] || code}</td>
+                  <tr key={code} className="border-b border-edge-50 hover:bg-card transition-colors">
+                    <td className="py-1 pr-2 text-ink font-medium">{countryNameMap[code] || code}</td>
                     {years.map(y => (
-                      <td key={y} className={`text-right py-1 px-1.5 ${valMap.get(y) !== null && valMap.get(y) !== undefined ? 'text-[#8b8ba0]' : 'text-[#5c5c72] italic'}`}>
+                      <td key={y} className={`text-right py-1 px-1.5 ${valMap.get(y) !== null && valMap.get(y) !== undefined ? 'text-ink-2' : 'text-muted italic'}`}>
                         {valMap.get(y) !== null && valMap.get(y) !== undefined ? fmt(valMap.get(y) as number, meta?.unit || '') : '—'}
                       </td>
                     ))}

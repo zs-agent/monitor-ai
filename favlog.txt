@@ -1,0 +1,13 @@
+Traceback (most recent call last):
+  File "E:\自研产品\monitor-ai\scripts\generate_favicon.py", line 28, in <module>
+    imgs = [make(s) for s in sizes]
+            ^^^^^^^
+  File "E:\自研产品\monitor-ai\scripts\generate_favicon.py", line 19, in make
+    d.arc([cx - rad, cy - rad, cx + rad, cy + rad], start=270, end=360, fill=col, width=w)
+  File "C:\Users\Y9000P\Python3.12\Lib\site-packages\PIL\ImageDraw.py", line 177, in arc
+    ink, fill = self._getink(fill)
+                ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Y9000P\Python3.12\Lib\site-packages\PIL\ImageDraw.py", line 159, in _getink
+    result_ink = self.draw.draw_ink(ink)
+                 ^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: color must be int, or tuple of one, three or four elements

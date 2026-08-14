@@ -1,8 +1,9 @@
-import zh from '@/locales/zh.json'
-import en from '@/locales/en.json'
+// 仅保留运行时 locale 状态（读取/写入）。
+// 文案统一使用组件内联 `locale === 'zh' ? ... : ...`，故移除原字典（t/getTranslations/tOrFallback）
+// 与 zh.json/en.json，消除双轨 i18n 导致的死代码与维护漂移。
 
-const dicts = { zh, en } as const
-export type Locale = keyof typeof dicts
+export type Locale = 'zh' | 'en'
+
 const DEFAULT_LOCALE: Locale = 'en'
 
 export function getLocale(): Locale {
@@ -21,24 +22,4 @@ export function setLocale(locale: Locale): void {
   if (typeof window !== 'undefined') {
     localStorage.setItem('monitor-ai-locale', locale)
   }
-}
-
-export function getTranslations(locale: Locale): typeof zh {
-  return dicts[locale]
-}
-
-export function t(key: string, locale: Locale): string {
-  const dict = getTranslations(locale)
-  const keys = key.split('.')
-  let result: any = dict
-  for (const k of keys) {
-    if (result && typeof result === 'object' && k in result) result = result[k]
-    else return key
-  }
-  return typeof result === 'string' ? result : key
-}
-
-export function tOrFallback(key: string, locale: Locale, fallback: string): string {
-  const result = t(key, locale)
-  return result === key ? fallback : result
 }

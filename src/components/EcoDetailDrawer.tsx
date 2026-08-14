@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import type { Locale } from '@/lib/i18n'
 import type { AiLocation } from '@/data/ai-locations'
 import { ECOSYSTEM_ENTITIES, ECO_SUBTYPE_LABELS } from '@/data/agent-ecosystem'
@@ -21,14 +21,13 @@ const TYPE_ZH: Record<string, string> = {
 }
 
 export default function EcoDetailDrawer({ locale, entity, signals, onClose, onSignalClick }: Props) {
-  const related = useMemo(() => {
-    if (!entity) return { projects: [], reports: [], news: [] as Signal[] }
+  const related = useMemo(() => {    if (!entity) return { projects: [], reports: [], news: [] as Signal[] }
     const relations = entity.ecosystem?.techRelations?.map(t => t.toLowerCase()) || []
     const projects = ECOSYSTEM_ENTITIES.filter(e =>
       e.id !== entity.id && (e.type === entity.type || (relations.length > 0 && e.ecosystem?.techRelations?.some(r => relations.includes(r.toLowerCase()))))
     ).slice(0, 6)
     const reports = MODEL_REPORTS.filter(r =>
-      relations.some(kw => (r.name + r.vendor + r.keyChange).toLowerCase().includes(kw)) ||
+      relations.some(kw => (r.name + r.vendor + (r.keyChange || '')).toLowerCase().includes(kw)) ||
       (entity.name.toLowerCase().split(' ')[0].length > 2 && (r.vendor.toLowerCase().includes(entity.name.toLowerCase().split(' ')[0]) || entity.name.toLowerCase().includes(r.vendor.toLowerCase())))
     ).slice(0, 4)
     const news = signals
@@ -38,6 +37,19 @@ export default function EcoDetailDrawer({ locale, entity, signals, onClose, onSi
     return { projects, reports, news }
   }, [entity, signals])
 
+  // 抽屉打开时：Escape 关闭 + 锁背景滚动
+  useEffect(() => {
+    if (!entity) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prev
+    }
+  }, [entity, onClose])
+
   if (!entity) return null
   const isZh = locale === 'zh'
   const subtype = entity.ecosystem?.subtype ? ECO_SUBTYPE_LABELS[entity.ecosystem.subtype as keyof typeof ECO_SUBTYPE_LABELS] : null
@@ -45,29 +57,29 @@ export default function EcoDetailDrawer({ locale, entity, signals, onClose, onSi
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <aside className="relative w-full max-w-[400px] h-full bg-[var(--bg-card)] border-l border-[var(--border)] shadow-2xl flex flex-col animate-slide-in">
+      <aside className="relative w-full max-w-[400px] h-full bg-card border-l border-edge shadow-2xl flex flex-col animate-slide-in">
         {/* 头部 */}
-        <header className="px-5 py-4 border-b border-[var(--border)] flex items-start justify-between gap-3 shrink-0">
+        <header className="px-5 py-4 border-b border-edge flex items-start justify-between gap-3 shrink-0">
           <div className="min-w-0">
-            <h3 className="text-[16px] font-semibold text-[var(--text-primary)]">{isZh ? entity.nameZh : entity.name}</h3>
+            <h3 className="text-[16px] font-semibold text-ink">{isZh ? entity.nameZh : entity.name}</h3>
             <div className="flex items-center gap-2 mt-1 flex-wrap">
-              <span className="text-[10px] px-2 py-0.5 rounded bg-[var(--accent-bg)] text-[var(--accent)] border border-[var(--accent)]/30">
+              <span className="text-[10px] px-2 py-0.5 rounded bg-accent-bg text-accent border border-accent-30">
                 {isZh ? (TYPE_ZH[entity.type] || entity.type) : entity.type}
               </span>
-              {subtype && <span className="text-[10px] px-2 py-0.5 rounded bg-[var(--bg-hover)] text-[var(--text-muted)]">{isZh ? subtype.zh : subtype.en}</span>}
-              <span className="text-[10px] text-[var(--text-muted)]">{entity.city}{entity.country ? `, ${entity.country}` : ''}</span>
+              {subtype && <span className="text-[10px] px-2 py-0.5 rounded bg-hover text-muted">{isZh ? subtype.zh : subtype.en}</span>}
+              <span className="text-[10px] text-muted">{entity.city}{entity.country ? `, ${entity.country}` : ''}</span>
             </div>
           </div>
-          <button onClick={onClose} className="text-[16px] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors shrink-0">×</button>
+          <button onClick={onClose} className="text-[16px] text-muted hover:text-ink transition-colors shrink-0">×</button>
         </header>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
           {/* 描述 */}
           {entity.description && (
-            <p className="text-[12px] text-[var(--text-secondary)] leading-relaxed">{entity.description}</p>
+            <p className="text-[12px] text-ink-2 leading-relaxed">{entity.description}</p>
           )}
           {entity.ecosystem?.note && (
-            <p className="text-[10px] text-[var(--text-dim)]">※ {entity.ecosystem.note}</p>
+            <p className="text-[10px] text-dim">※ {entity.ecosystem.note}</p>
           )}
 
           {/* 链接 */}
@@ -75,13 +87,13 @@ export default function EcoDetailDrawer({ locale, entity, signals, onClose, onSi
             <div className="flex items-center gap-2 flex-wrap">
               {entity.ecosystem.github && (
                 <a href={`https://github.com/${entity.ecosystem.github}`} target="_blank" rel="noopener noreferrer"
-                  className="text-[11px] px-3 py-1.5 rounded-lg bg-[var(--bg-card-2)] border border-[var(--border)] text-[var(--accent)] hover:border-[var(--accent)]/40 transition-colors">
+                  className="text-[11px] px-3 py-1.5 rounded-lg bg-card-2 border border-edge text-accent hover:border-accent-40 transition-colors">
                   GitHub ↗
                 </a>
               )}
               {entity.ecosystem.home && (
                 <a href={entity.ecosystem.home} target="_blank" rel="noopener noreferrer"
-                  className="text-[11px] px-3 py-1.5 rounded-lg bg-[var(--bg-card-2)] border border-[var(--border)] text-[var(--text-secondary)] hover:text-[var(--accent)] transition-colors">
+                  className="text-[11px] px-3 py-1.5 rounded-lg bg-card-2 border border-edge text-ink-2 hover:text-accent transition-colors">
                   {isZh ? '官网' : 'Home'} ↗
                 </a>
               )}
@@ -95,9 +107,9 @@ export default function EcoDetailDrawer({ locale, entity, signals, onClose, onSi
             ) : (
               <div className="space-y-1.5">
                 {related.projects.map(p => (
-                  <div key={p.id} className="flex items-center justify-between gap-2 py-1.5 px-2.5 rounded-lg bg-[var(--bg-card-2)]">
-                    <span className="text-[12px] text-[var(--text-primary)]">{isZh ? p.nameZh : p.name}</span>
-                    <span className="text-[9px] text-[var(--text-muted)]">{isZh ? (TYPE_ZH[p.type] || p.type) : p.type}</span>
+                  <div key={p.id} className="flex items-center justify-between gap-2 py-1.5 px-2.5 rounded-lg bg-card-2">
+                    <span className="text-[12px] text-ink">{isZh ? p.nameZh : p.name}</span>
+                    <span className="text-[9px] text-muted">{isZh ? (TYPE_ZH[p.type] || p.type) : p.type}</span>
                   </div>
                 ))}
               </div>
@@ -112,9 +124,9 @@ export default function EcoDetailDrawer({ locale, entity, signals, onClose, onSi
               <div className="space-y-1.5">
                 {related.reports.map(r => (
                   <a key={r.id} href={r.sourceUrl} target="_blank" rel="noopener noreferrer"
-                    className="block py-1.5 px-2.5 rounded-lg bg-[var(--bg-card-2)] hover:bg-[var(--hover-overlay)] transition-colors">
-                    <div className="text-[11px] text-[var(--accent)]">{r.name}</div>
-                    <div className="text-[9px] text-[var(--text-muted)] mt-0.5">{r.vendor} · {r.type} · {r.date}</div>
+                    className="block py-1.5 px-2.5 rounded-lg bg-card-2 hover:bg-overlay transition-colors">
+                    <div className="text-[11px] text-accent">{r.name}</div>
+                    <div className="text-[9px] text-muted mt-0.5">{r.vendor} · {r.type} · {r.date}</div>
                   </a>
                 ))}
               </div>
@@ -129,9 +141,9 @@ export default function EcoDetailDrawer({ locale, entity, signals, onClose, onSi
               <div className="space-y-1.5">
                 {related.news.map(s => (
                   <button key={s.id} onClick={() => onSignalClick?.(s)}
-                    className="w-full text-left py-1.5 px-2.5 rounded-lg bg-[var(--bg-card-2)] hover:bg-[var(--hover-overlay)] transition-colors">
-                    <div className="text-[11px] text-[var(--text-primary)] leading-snug line-clamp-2">{s.title}</div>
-                    <div className="text-[9px] text-[var(--text-muted)] mt-0.5">{s.source} · {new Date(s.publishedAt).toLocaleDateString()}</div>
+                    className="w-full text-left py-1.5 px-2.5 rounded-lg bg-card-2 hover:bg-overlay transition-colors">
+                    <div className="text-[11px] text-ink leading-snug line-clamp-2">{s.title}</div>
+                    <div className="text-[9px] text-muted mt-0.5">{s.source} · {new Date(s.publishedAt).toLocaleDateString()}</div>
                   </button>
                 ))}
               </div>
@@ -146,12 +158,12 @@ export default function EcoDetailDrawer({ locale, entity, signals, onClose, onSi
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section>
-      <h4 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-2">{title}</h4>
+      <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted mb-2">{title}</h4>
       {children}
     </section>
   )
 }
 
 function EmptyLine({ locale }: { locale: Locale }) {
-  return <p className="text-[10px] text-[var(--text-dim)]">{locale === 'zh' ? '暂无关联内容（等待数据接入）' : 'No related content yet'}</p>
+  return <p className="text-[10px] text-dim">{locale === 'zh' ? '暂无关联内容（等待数据接入）' : 'No related content yet'}</p>
 }

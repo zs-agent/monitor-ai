@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo, useRef, memo } from 'react'
 import { type Locale } from '@/lib/i18n'
+import { useTheme } from '@/lib/theme'
 import type { Signal } from '@/types/signal'
 import { AI_HUBS, type AiLocation } from '@/data/ai-locations'
 import { ECOSYSTEM_ENTITIES, TECH_CONNECTIONS, ECO_CONN_LABELS, ECO_CONN_COLORS, ECO_SUBTYPE_LABELS } from '@/data/agent-ecosystem'
@@ -172,13 +173,17 @@ function extractSignalLocations(signals?: Signal[]): Array<{ lat: number; lng: n
   if (!signals) return []
   const locs: Array<{ lat: number; lng: number; title: string; source: string; id: string }> = []
   const seen = new Set<string>()
+  // 词边界匹配（避免 "meta" 命中 "metamorphosis" 等子串误报）
+  const hasWord = (text: string, word: string): boolean => {
+    try { return new RegExp(`(^|[^a-z0-9])${word}([^a-z0-9]|$)`, 'i').test(text) } catch { return text.includes(word) }
+  }
 
   for (const signal of signals) {
     if (seen.has(signal.id)) continue
     const text = `${signal.title} ${signal.summary}`.toLowerCase()
 
     for (const [entity, coords] of Object.entries(ENTITY_MAP)) {
-      if (text.includes(entity)) {
+      if (hasWord(text, entity)) {
         seen.add(signal.id)
         locs.push({ lat: coords[0] + (hashId(signal.id) - 0.5) * 0.1, lng: coords[1] + (hashId(signal.id) - 0.5) * 0.1, title: signal.title.slice(0, 60), source: signal.source, id: signal.id })
         break
@@ -221,67 +226,67 @@ function HubPopupContent({
   const importanceDots = '●'.repeat(importance) + '○'.repeat(5 - importance)
   const subtypeLabel = ecosystem?.subtype ? (ECO_SUBTYPE_LABELS[ecosystem.subtype as keyof typeof ECO_SUBTYPE_LABELS] || { en: ecosystem.subtype, zh: ecosystem.subtype }) : null
   return (
-    <div style={{ fontSize: '11px', color: '#e5e5e5', lineHeight: 1.5, minWidth: 240, maxWidth: 320 }}>
+    <div style={{ fontSize: '11px', color: 'var(--text-primary)', lineHeight: 1.5, minWidth: 240, maxWidth: 320 }}>
       <div style={{ fontWeight: 600, fontSize: '14px', marginBottom: 2 }}>{displayName}</div>
-      <div style={{ color: '#5c5c72', marginBottom: 6, fontSize: '10px' }}>{displayCity}, {country}{ecosystem?.note ? ` · ${ecosystem.note}` : ''}</div>
+      <div style={{ color: 'var(--text-muted)', marginBottom: 6, fontSize: '10px' }}>{displayCity}, {country}{ecosystem?.note ? ` · ${ecosystem.note}` : ''}</div>
       <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
         <span style={{ fontSize: '8px', padding: '2px 8px', borderRadius: 3, background: `${color}20`, color, border: `1px solid ${color}40` }}>{typeDisplay}</span>
         {subtypeLabel && <span style={{ fontSize: '8px', padding: '2px 8px', borderRadius: 3, background: `${color}14`, color: `${color}cc`, border: `1px solid ${color}30` }}>{isZh ? subtypeLabel.zh : subtypeLabel.en}</span>}
-        <span style={{ fontSize: '9px', color: '#8b8ba0' }}>{isZh ? '重要度' : 'Importance'}: {importanceDots}</span>
+        <span style={{ fontSize: '9px', color: 'var(--text-secondary)' }}>{isZh ? '重要度' : 'Importance'}: {importanceDots}</span>
       </div>
-      {description ? <div style={{ fontSize: '10px', color: '#8b8ba0', marginBottom: 8, padding: '6px 8px', background: '#0c0c14', borderRadius: 4 }}>📋 {description}</div> : null}
+      {description ? <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginBottom: 8, padding: '6px 8px', background: 'var(--bg-card-2)', borderRadius: 4 }}>📋 {description}</div> : null}
       {models.length > 0 ? (
-        <div style={{ marginTop: 4, borderTop: '1px solid #1e1e2e', paddingTop: 6 }}>
-          <div style={{ fontSize: '9px', color: '#5c5c72', marginBottom: 4, fontWeight: 600 }}>{isZh ? '旗下模型' : 'Models'} ({models.length})</div>
+        <div style={{ marginTop: 4, borderTop: '1px solid var(--border)', paddingTop: 6 }}>
+          <div style={{ fontSize: '9px', color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600 }}>{isZh ? '旗下模型' : 'Models'} ({models.length})</div>
           {models.map((m: any, i: number) => (
-            <div key={i} style={{ fontSize: '9px', padding: '3px 0', borderBottom: '1px solid #1e1e2e30' }}>
+            <div key={i} style={{ fontSize: '9px', padding: '3px 0', borderBottom: '1px solid var(--border)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ color: '#e5e5e5', fontWeight: 500 }}>{m.name}</span>
-                <span style={{ fontSize: '7px', color: '#5c5c72' }}>{m.version}</span>
-                <span style={{ fontSize: '7px', color: '#06b6d4', marginLeft: 'auto' }}>{m.releaseYear}</span>
+                <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{m.name}</span>
+                <span style={{ fontSize: '7px', color: 'var(--text-muted)' }}>{m.version}</span>
+                <span style={{ fontSize: '7px', color: 'var(--accent)', marginLeft: 'auto' }}>{m.releaseYear}</span>
               </div>
-              {m.description ? <div style={{ fontSize: '7px', color: '#5c5c72', marginTop: 1 }}>{m.description}</div> : null}
+              {m.description ? <div style={{ fontSize: '7px', color: 'var(--text-muted)', marginTop: 1 }}>{m.description}</div> : null}
             </div>
           ))}
         </div>
       ) : null}
       {connected.length > 0 ? (
-        <div style={{ marginTop: 6, borderTop: '1px solid #1e1e2e', paddingTop: 6 }}>
-          <div style={{ fontSize: '9px', color: '#5c5c72', marginBottom: 3, fontWeight: 600 }}>{isZh ? '关系连线' : 'Connections'} ({connected.length})</div>
+        <div style={{ marginTop: 6, borderTop: '1px solid var(--border)', paddingTop: 6 }}>
+          <div style={{ fontSize: '9px', color: 'var(--text-muted)', marginBottom: 3, fontWeight: 600 }}>{isZh ? '关系连线' : 'Connections'} ({connected.length})</div>
           {connected.slice(0, 5).map((c: any, i: number) => (
-            <div key={i} style={{ fontSize: '8px', color: '#8b8ba0', display: 'flex', alignItems: 'center', gap: 4, padding: '1px 0' }}>
+            <div key={i} style={{ fontSize: '8px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 4, padding: '1px 0' }}>
               <span style={{ width: 8, height: 1, background: CONN_COLORS[c.type] || '#555', display: 'inline-block', flexShrink: 0 }} />
               <span>{isZh ? c.otherNameZh : c.otherName}</span>
               <span style={{ color: CONN_COLORS[c.type] || '#555' }}>· {isZh ? (CONN_LABELS[c.type]?.zh || c.type) : (CONN_LABELS[c.type]?.en || c.type)}</span>
             </div>
           ))}
-          {connected.length > 5 ? <div style={{ fontSize: '8px', color: '#5c5c72' }}>...+{connected.length - 5} {isZh ? '条更多' : 'more'}</div> : null}
+          {connected.length > 5 ? <div style={{ fontSize: '8px', color: 'var(--text-muted)' }}>...+{connected.length - 5} {isZh ? '条更多' : 'more'}</div> : null}
         </div>
       ) : null}
       {nearbySignals > 0 ? (
-        <div style={{ marginTop: 4, fontSize: '9px', color: '#f59e0b', borderTop: '1px solid #1e1e2e', paddingTop: 5 }}>
+        <div style={{ marginTop: 4, fontSize: '9px', color: '#f59e0b', borderTop: '1px solid var(--border)', paddingTop: 5 }}>
           📍 {nearbySignals} {isZh ? '条附近信号' : 'nearby signals'}
         </div>
       ) : null}
       {(ecosystem || onSelectEntity) && (
-        <div style={{ marginTop: 8, display: 'flex', gap: 6, alignItems: 'center', borderTop: '1px solid #1e1e2e', paddingTop: 6 }}>
+        <div style={{ marginTop: 8, display: 'flex', gap: 6, alignItems: 'center', borderTop: '1px solid var(--border)', paddingTop: 6 }}>
           {onSelectEntity && (
             <button
               onClick={onSelectEntity}
-              style={{ fontSize: '9px', padding: '3px 10px', borderRadius: 4, background: '#06b6d420', color: '#06b6d4', border: '1px solid #06b6d440', cursor: 'pointer' }}
+              style={{ fontSize: '9px', padding: '3px 10px', borderRadius: 4, background: 'var(--accent-bg)', color: 'var(--accent)', border: '1px solid var(--accent)', cursor: 'pointer' }}
             >
               {isZh ? '查看详情并联动' : 'Details & related'}
             </button>
           )}
           {ecosystem?.github && (
             <a href={`https://github.com/${ecosystem.github}`} target="_blank" rel="noopener noreferrer"
-              style={{ fontSize: '9px', color: '#8b8ba0', textDecoration: 'none' }}>
+              style={{ fontSize: '9px', color: 'var(--text-secondary)', textDecoration: 'none' }}>
               GitHub ↗
             </a>
           )}
           {ecosystem?.home && (
             <a href={ecosystem.home} target="_blank" rel="noopener noreferrer"
-              style={{ fontSize: '9px', color: '#8b8ba0', textDecoration: 'none' }}>
+              style={{ fontSize: '9px', color: 'var(--text-secondary)', textDecoration: 'none' }}>
               Home ↗
             </a>
           )}
@@ -314,6 +319,7 @@ const LAYER_OPTIONS: { key: MapLayer; label: Record<string, string>; color: stri
 ]
 
 const DashboardMap = memo(function DashboardMap({ locale, signals, onSelectEntity }: Props) {
+  const { theme } = useTheme()
   const [MapComponents, setMapComponents] = useState<{
     MapContainer: React.ComponentType<any>
     TileLayer: React.ComponentType<any>
@@ -325,8 +331,9 @@ const DashboardMap = memo(function DashboardMap({ locale, signals, onSelectEntit
     useMap: () => any
   } | null>(null)
   const [L, setL] = useState<any>(null)
+  const [mapLoadError, setMapLoadError] = useState(false)
   const [activeLayers, setActiveLayers] = useState<MapLayer[]>(['lab', 'agent-project', 'agent-platform', 'infra', 'company', 'research', 'signal', 'connection'])
-  const [layerOpen, setLayerOpen] = useState(false)
+  const [layerOpen, setLayerOpen] = useState(true)
 
   useEffect(() => {
     if (!document.querySelector('link[href*="leaflet"]')) {
@@ -344,8 +351,8 @@ const DashboardMap = memo(function DashboardMap({ locale, signals, onSelectEntit
         Marker: mod.Marker, Popup: mod.Popup, Tooltip: mod.Tooltip,
         useMap: mod.useMap,
       })
-    }).catch((err) => { console.error('Failed to load react-leaflet:', err) })
-    import('leaflet').then(lib => setL(lib)).catch((err) => { console.error('Failed to load leaflet:', err) })
+    }).catch((err) => { console.error('Failed to load react-leaflet:', err); setMapLoadError(true) })
+    import('leaflet').then(lib => setL(lib)).catch((err) => { console.error('Failed to load leaflet:', err); setMapLoadError(true) })
   }, [])
 
   const mapWrapRef = useRef<HTMLDivElement>(null)
@@ -388,6 +395,9 @@ const DashboardMap = memo(function DashboardMap({ locale, signals, onSelectEntit
     setActiveLayers(prev => prev.includes(layer) ? prev.filter(l => l !== layer) : [...prev, layer])
   }
 
+  const selectAllLayers = () => setActiveLayers(LAYER_OPTIONS.map(o => o.key))
+  const clearLayers = () => setActiveLayers([])
+
   const isLayerActive = (layer: MapLayer) => activeLayers.includes(layer)
 
   // Bounds covering every hub so the default view shows all points
@@ -426,9 +436,17 @@ const DashboardMap = memo(function DashboardMap({ locale, signals, onSelectEntit
 
   if (!MapComponents) {
     return (
-      <PanelBase id="map" title={locale === 'zh' ? '全景 AI Agent 生态地图' : 'AI Agent Ecosystem Map'} dataBadge="static" collapsible className="h-full">
+      <PanelBase id="map" title={locale === 'zh' ? '全景 AI Agent 生态地图' : 'AI Agent Ecosystem Map'} dataBadge={mapLoadError ? 'unavailable' : 'static'} collapsible className="h-full">
         <div className="h-full min-h-0 flex items-center justify-center">
-          <div className="panel-loading"><div className="panel-loading-radar"><div className="panel-radar-dot" /></div><div className="panel-loading-text">{locale === 'zh' ? '加载地图...' : 'Loading map...'}</div></div>
+          {mapLoadError ? (
+            <div className="text-center px-4">
+              <span className="text-2xl mb-2 block opacity-40">🗺️</span>
+              <p className="text-[12px] text-danger">{locale === 'zh' ? '地图组件加载失败' : 'Map failed to load'}</p>
+              <p className="text-[10px] text-muted mt-1">{locale === 'zh' ? '请检查网络后刷新页面重试' : 'Check network and refresh'}</p>
+            </div>
+          ) : (
+            <div className="panel-loading"><div className="panel-loading-radar"><div className="panel-radar-dot" /></div><div className="panel-loading-text">{locale === 'zh' ? '加载地图...' : 'Loading map...'}</div></div>
+          )}
         </div>
       </PanelBase>
     )
@@ -460,40 +478,17 @@ const DashboardMap = memo(function DashboardMap({ locale, signals, onSelectEntit
       collapsible
       className="h-full"
       headerExtra={
-        <div className="relative">
-          <button
-            onClick={() => setLayerOpen(!layerOpen)}
-            className="text-[9px] px-2 py-0.5 rounded border border-[#2a2a3e] text-[#8b8ba0] hover:text-[#06b6d4] hover:border-[#06b6d4]/30 transition-colors flex items-center gap-1"
-          >
-            <span>{locale === 'zh' ? '图层' : 'Layers'}</span>
-            <span className="text-[9px]">{layerOpen ? '▲' : '▼'}</span>
-          </button>
-          {layerOpen && (
-            <>
-              <div className="fixed inset-0 z-10" onClick={() => setLayerOpen(false)} />
-              <div className="absolute right-0 top-full mt-1 z-20 bg-[#12121a] border border-[#1e1e2e] rounded-lg p-2 min-w-[130px] shadow-xl">
-                {LAYER_OPTIONS.map(opt => (
-                  <label
-                    key={opt.key}
-                    className="flex items-center gap-2 py-1 px-1 rounded hover:bg-[#16162a] cursor-pointer text-[10px] text-[#8b8ba0]"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isLayerActive(opt.key)}
-                      onChange={() => toggleLayer(opt.key)}
-                      className="w-2.5 h-2.5 rounded accent-[#06b6d4]"
-                    />
-                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: opt.color }} />
-                    {locale === 'zh' ? opt.label.zh : opt.label.en}
-                  </label>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
+        <button
+          onClick={() => setLayerOpen(!layerOpen)}
+          className="text-[9px] px-2 py-0.5 rounded border border-edge-light text-ink-2 hover:text-accent hover:border-[#06b6d4]/30 transition-colors flex items-center gap-1"
+        >
+          <span>{locale === 'zh' ? '图层' : 'Layers'}</span>
+          <span className="text-[9px]">{layerOpen ? '▲' : '▼'}</span>
+        </button>
       }
     >
-      <div className="h-full min-h-0" ref={mapWrapRef}>
+      <div className="relative z-0 h-full min-h-0">
+        <div className="h-full min-h-0" ref={mapWrapRef}>
         <MapContainer
           center={[25, 10]}
           zoom={2}
@@ -503,27 +498,27 @@ const DashboardMap = memo(function DashboardMap({ locale, signals, onSelectEntit
           maxBounds={[[-85, -180], [85, 180]]}
           maxBoundsViscosity={1}
           worldCopyJump={false}
-          style={{ height: '100%', width: '100%', background: '#0a0a0f' }}
+          style={{ height: '100%', width: '100%', background: 'var(--bg-primary)' }}
           zoomControl={false}
           attributionControl={false}
         >
           {MapController && <MapController bounds={allBounds} />}
-          <TileLayer attribution='&copy; <a href="https://carto.com/">CARTO</a>' url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
+          <TileLayer attribution='&copy; <a href="https://carto.com/">CARTO</a>' url={theme === 'light' ? 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png' : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'} />
 
           {/* Dynamic connection lines */}
           {showConnections && connectionLines.map((conn, i) => {
             const color = CONN_COLORS[conn.type] || '#555'
             const positions: [number, number][] = [conn.from, conn.to]
             return (
-              <Polyline
-                key={`conn-${i}`}
-                positions={positions}
-                pathOptions={{ color, weight: 1.2, opacity: 0.45, dashArray: '6 8', className: 'dash-flow-line' }}
-              >
-                <Tooltip direction="center" opacity={0.85}>
-                  <span className="text-[9px]">{conn.label}</span>
-                </Tooltip>
-              </Polyline>
+              // 柔和底色 + 主流动线（双层，营造光带纵深）
+              ([
+                <Polyline key={`conn-base-${i}`} positions={positions} pathOptions={{ color, weight: 4, opacity: 0.1 }} />,
+                <Polyline key={`conn-flow-${i}`} positions={positions} pathOptions={{ color, weight: 1.6, opacity: 0.7, dashArray: '5 9', className: 'dash-flow-line' }}>
+                  <Tooltip direction="center" opacity={0.85}>
+                    <span className="text-[9px]">{conn.label}</span>
+                  </Tooltip>
+                </Polyline>,
+              ])
             )
           })}
 
@@ -532,7 +527,7 @@ const DashboardMap = memo(function DashboardMap({ locale, signals, onSelectEntit
             const color = CONN_COLORS[m.type] || '#555'
             const icon = L.divIcon({
               className: '',
-              html: `<div style="font-size:7px;color:${color}99;font-weight:600;white-space:nowrap;text-shadow:0 0 4px rgba(0,0,0,0.9);pointer-events:none">${m.label}</div>`,
+              html: `<div style="font-size:7px;color:${color};font-weight:600;white-space:nowrap;pointer-events:none">${m.label}</div>`,
               iconSize: [70, 12],
               iconAnchor: [35, 6],
             })
@@ -564,7 +559,14 @@ const DashboardMap = memo(function DashboardMap({ locale, signals, onSelectEntit
                 key={hub.id}
                 center={[hub.lat, hub.lng]}
                 radius={size}
-                pathOptions={{ fillColor: color, fillOpacity: isEco ? 0.9 : 0.75, color, weight: isEco ? 2 : 1.5, opacity: 0.6 }}
+                pathOptions={{
+                  fillColor: color,
+                  fillOpacity: 1,
+                  // 高对比描边光晕：深色瓦片用浅色环、浅色瓦片用深色环，任何主题下都清晰
+                  color: 'var(--map-halo)',
+                  weight: isEco ? 2.5 : 2,
+                  opacity: 1,
+                }}
                 eventHandlers={{
                   click: (e: { target: { openPopup: () => void } }) => e.target.openPopup(),
                 }}
@@ -589,7 +591,7 @@ const DashboardMap = memo(function DashboardMap({ locale, signals, onSelectEntit
                 <Tooltip direction="top" offset={[0, -size - 5]} opacity={0.9}>
                   <div style={{ fontSize: '10px' }}>
                     <div style={{ fontWeight: 600 }}>{displayName}</div>
-                    <div style={{ fontSize: '8px', color: '#8b8ba0' }}>{displayCity} · {typeDisplay}{ecoSubtype ? ` · ${isZh ? ecoSubtype.zh : ecoSubtype.en}` : ''} · {'●'.repeat(hub.importance)}</div>
+                    <div style={{ fontSize: '8px', color: 'var(--text-secondary)' }}>{displayCity} · {typeDisplay}{ecoSubtype ? ` · ${isZh ? ecoSubtype.zh : ecoSubtype.en}` : ''} · {'●'.repeat(hub.importance)}</div>
                     {hub.models.length > 0 && (
                       <div style={{ fontSize: '7px', color: CONN_COLORS.partner }}>
                         {hub.models.length} model{hub.models.length > 1 ? 's' : ''}: {hub.models[0].name}{hub.models.length > 1 ? '...' : ''}
@@ -603,19 +605,19 @@ const DashboardMap = memo(function DashboardMap({ locale, signals, onSelectEntit
 
           {/* Signal markers */}
           {showSignals && signalLocations.map(loc => (
-            <CircleMarker
-              key={loc.id}
-              center={[loc.lat, loc.lng]}
-              radius={5}
-              pathOptions={{ fillColor: '#f59e0b', fillOpacity: 0.55, color: '#f59e0b', weight: 2, opacity: 0.7 }}
+              <CircleMarker
+                key={loc.id}
+                center={[loc.lat, loc.lng]}
+                radius={5}
+                pathOptions={{ fillColor: '#f59e0b', fillOpacity: 1, color: 'var(--map-halo)', weight: 2, opacity: 1, className: 'map-signal-dot' }}
               eventHandlers={{
                 click: (e: { target: { openPopup: () => void } }) => e.target.openPopup(),
               }}
             >
               <Popup>
-                <div className="text-xs max-w-52" style={{ color: '#e5e5e5', lineHeight: 1.4 }}>
+                <div className="text-xs max-w-52" style={{ color: 'var(--text-primary)', lineHeight: 1.4 }}>
                   <div>{loc.title}</div>
-                  <div className="text-[#06b6d4] mt-1 text-[9px]">{loc.source}</div>
+                  <div className="text-accent mt-1 text-[9px]">{loc.source}</div>
                 </div>
               </Popup>
               <Tooltip direction="top" offset={[0, -7]} opacity={0.85}>
@@ -624,9 +626,49 @@ const DashboardMap = memo(function DashboardMap({ locale, signals, onSelectEntit
             </CircleMarker>
           ))}
         </MapContainer>
+        </div>
+        {layerOpen && (
+          <div className="absolute left-0 top-2 z-[1000] bg-elevated-95 backdrop-blur border border-edge rounded-lg p-2.5 min-w-[160px] shadow-2xl">
+            <div className="flex items-center justify-between mb-1.5 px-1">
+              <span className="text-[9px] font-semibold uppercase tracking-wider text-muted">
+                {locale === 'zh' ? '图层控制' : 'Layers'}
+              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-[8px] text-dim">{activeLayers.length}/{LAYER_OPTIONS.length}</span>
+                <button onClick={() => setLayerOpen(false)} className="text-[9px] text-muted hover:text-ink-2" title={locale === 'zh' ? '收起' : 'Collapse'}>×</button>
+              </div>
+            </div>
+            <div className="space-y-0.5">
+              {LAYER_OPTIONS.map(opt => (
+                <label
+                  key={opt.key}
+                  className="flex items-center gap-2 py-1 px-1 rounded hover:bg-overlay cursor-pointer text-[10px] text-ink-2"
+                >
+                  <input
+                    type="checkbox"
+                    checked={isLayerActive(opt.key)}
+                    onChange={() => toggleLayer(opt.key)}
+                    className="w-2.5 h-2.5 rounded accent-[var(--accent)]"
+                  />
+                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: opt.color }} />
+                  {locale === 'zh' ? opt.label.zh : opt.label.en}
+                </label>
+              ))}
+            </div>
+            <div className="flex items-center gap-2 mt-2 pt-1.5 border-t border-edge px-1">
+              <button onClick={selectAllLayers} className="text-[9px] text-accent hover:text-accent-dim">
+                {locale === 'zh' ? '全选' : 'All'}
+              </button>
+              <span className="w-px h-2.5 bg-edge" />
+              <button onClick={clearLayers} className="text-[9px] text-muted hover:text-ink-2">
+                {locale === 'zh' ? '清空' : 'None'}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
-      <div className="flex items-center gap-3 px-4 py-2 border-t border-[#1e1e2e] text-[9px] text-[#5c5c72] flex-wrap">
+      <div className="flex items-center gap-3 px-4 py-2 border-t border-edge text-[9px] text-muted flex-wrap">
         {isLayerActive('lab') && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#38bdf8]" />{locale === 'zh' ? '大模型厂商' : 'Model Lab'}</span>}
         {isLayerActive('agent-project') && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#34d399]" />{locale === 'zh' ? 'Agent 开源' : 'Agent OSS'}</span>}
         {isLayerActive('agent-platform') && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#fb923c]" />{locale === 'zh' ? 'Agent 平台' : 'Agent Platform'}</span>}

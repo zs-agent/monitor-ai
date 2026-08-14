@@ -1,6 +1,8 @@
 import type { Signal } from '@/types/signal'
 import { fetchWithTimeout } from '@/lib/fetch-with-timeout'
 import { normalizeGitHubRepo, type RawGitHubRepo } from '@/lib/normalizer'
+import { createStarSnapshot } from '@/lib/star-snapshot'
+import path from 'node:path'
 import type { SignalProvider } from './types'
 
 const TIMEOUT = 8000
@@ -56,15 +58,22 @@ export async function fetchTrendingRepos(limit = 7): Promise<RawGitHubRepo[]> {
   return all.slice(0, limit)
 }
 
+/** 每日 star 快照：供信号流计算 +N/week（模块级单例，与 agent-radar 同机制） */
+const starSnapshot = createStarSnapshot(path.join(process.cwd(), 'data', '.github-trend-snapshot.json'))
+
 export const githubProvider: SignalProvider = {
   id: 'github',
   name: 'GitHub Trending',
+  // GitHub API 无 token 仅 60 req/hr，保持低频避免触发限流
+  pollIntervalMs: 10 * 60 * 1000,
   async fetchSignals(locale) {
     const repos = await fetchTrendingRepos(10)
     const signals: Signal[] = []
     for (const repo of repos) {
       try {
-        signals.push(normalizeGitHubRepo(repo, locale))
+        // 记录每日 star 快照，返回近 7 日增量（+N/week）
+        const delta = starSnapshot.record(repo.name, repo.stars)
+        signals.push(normalizeGitHubRepo(repo, locale, delta))
       } catch {
         console.warn(`[github] skip malformed repo ${repo?.id}`)
       }

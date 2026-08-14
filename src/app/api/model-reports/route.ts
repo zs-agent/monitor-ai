@@ -8,6 +8,8 @@ import { NextResponse } from 'next/server'
 import { MODEL_REPORTS, type ModelReportItem, type ModelReportType } from '@/data/model-reports'
 import { fetchWithTimeout } from '@/lib/fetch-with-timeout'
 
+export const dynamic = 'force-dynamic'
+
 const TIMEOUT = 10000
 const CACHE_TTL = 15 * 60 * 1000
 
@@ -25,6 +27,13 @@ const VENDOR_KEYWORDS: [string, string][] = [
   ['openai', 'OpenAI'], ['gpt', 'OpenAI'], ['claude', 'Anthropic'], ['anthropic', 'Anthropic'],
   ['gemini', 'Google'], ['gemma', 'Google'], ['google', 'Google'], ['llama', 'Meta'],
   ['mistral', 'Mistral'], ['phi', 'Microsoft'], ['grok', 'xAI'], ['qwen3', 'Qwen'],
+]
+
+/** 官方组织白名单：owner 命中视为厂商官方发布（否则为社区权重更新） */
+const OFFICIAL_ORGS = [
+  'Qwen', 'QwenLM', 'deepseek-ai', 'moonshotai', 'MiniMax-AI', 'zai-org', 'ZhipuAI',
+  'openai', 'anthropic', 'google', 'google-deepmind', 'meta-llama', 'mistralai',
+  'microsoft', 'bytedance', 'xai-org',
 ]
 
 function inferVendor(text: string): string {
@@ -73,6 +82,7 @@ function hfPaperToItem(p: HfPaper): ModelReportItem {
 
 function hfModelToItem(m: HfModel, vendor: string): ModelReportItem {
   const shortName = m.id.split('/').pop() || m.id
+  const owner = m.id.split('/')[0] || ''
   return {
     id: `hm-${m.id}`,
     vendor,
@@ -82,6 +92,7 @@ function hfModelToItem(m: HfModel, vendor: string): ModelReportItem {
     sourceUrl: `https://huggingface.co/${m.id}`,
     keyChange: `HuggingFace 最新权重更新：${m.id}`,
     usageImpact: '',
+    official: OFFICIAL_ORGS.includes(owner),
   }
 }
 

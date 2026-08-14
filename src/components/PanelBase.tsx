@@ -163,7 +163,7 @@ export default function PanelBase({
             <div className="panel-error-msg">{error}</div>
             {onRetry && (
               <button
-                className="text-[10px] text-[#06b6d4] hover:text-[#0891b2] transition-colors mt-1"
+                className="text-[10px] text-accent hover:text-accent-dim transition-colors mt-1"
                 onClick={handleRetryClick}
               >
                 {retryCountdown !== null ? `Retrying (${retryCountdown}s)` : 'Retry now'}
