@@ -68,6 +68,27 @@ describe('aggregate.mergeSignals（分级轮询合并）', () => {
     const merged = mergeSignals(prev, fresh, new Set(['hackernews', 'github']))
     expect(merged.map(s => s.id)).toEqual(['c'])
   })
+
+  it('同标题的 en/zh 双语变体都保留（B1：zh 变体不再被当重复项丢弃）', () => {
+    const prev: Signal[] = []
+    const fresh = [
+      makeSignal({ id: 'hn-1', providerId: 'hackernews', title: 'Same Story Title', language: 'en' }),
+      makeSignal({ id: 'hn-1-zh', providerId: 'hackernews', title: 'Same Story Title', language: 'zh' }),
+    ]
+    const merged = mergeSignals(prev, fresh, new Set(['hackernews']))
+    expect(merged.map(s => s.id)).toEqual(['hn-1', 'hn-1-zh'])
+  })
+
+  it('刷新失败的 provider 其旧信号保留（stale 降级，不因失败清空该源）', () => {
+    const prev = [
+      makeSignal({ id: 'hn-old', providerId: 'hackernews', title: 'HN Story' }),
+      makeSignal({ id: 'gh-old', providerId: 'github', title: 'GH Repo' }),
+    ]
+    const fresh = [makeSignal({ id: 'gh-new', providerId: 'github', title: 'GH New Repo' })]
+    // hackernews 刷新失败：旧 HN 信号保留，github 成功：旧 GH 被新 GH 替换
+    const merged = mergeSignals(prev, fresh, new Set(['hackernews', 'github']), new Set(['hackernews']))
+    expect(merged.map(s => s.id)).toEqual(['gh-new', 'hn-old'])
+  })
 })
 
 describe('insights.buildCategory（无 LLM key 时）', () => {

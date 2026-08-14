@@ -35,6 +35,8 @@ const SNAPSHOT_FILE = path.join(SNAPSHOT_DIR, 'signals-snapshot.json')
 const snapshots = new Map<'zh' | 'en', LocaleSnapshot>()
 /** 单飞锁：同一刷新范围并发时共享同一次拉取 */
 const inflight = new Map<string, Promise<LocaleSnapshot>>()
+/** 磁盘快照的内存镜像：双 locale 并发刷新时基于镜像合并写盘，避免 load-modify-write 互相覆盖 */
+const diskState = loadFromDisk()
 
 // 模块加载时注册全部 provider（/api/signals 与 /api/insights 共用一份注册）
 for (const p of providers) {
@@ -61,15 +63,23 @@ function saveToDisk(all: Partial<Record<'zh' | 'en', LocaleSnapshot>>): void {
 
 /**
  * 合并快照：新拉取的信号 + 旧快照中「未被本次刷新的 provider」的信号，
- * 按 title 去重（新拉的优先）。分级轮询时只刷新部分源，其余源数据保留。
+ * 按 title+language 去重（新拉的优先）。分级轮询时只刷新部分源，其余源数据保留；
+ * 刷新失败的 provider 其旧信号也保留（stale 降级），避免失败即清空该源内容。
  */
-export function mergeSignals(prev: Signal[], fresh: Signal[], refreshedProviderIds: Set<string>): Signal[] {
-  const kept = prev.filter(s => !s.providerId || !refreshedProviderIds.has(s.providerId))
+export function mergeSignals(
+  prev: Signal[],
+  fresh: Signal[],
+  refreshedProviderIds: Set<string>,
+  failedProviderIds: Set<string> = new Set(),
+): Signal[] {
+  const kept = prev.filter(s => !s.providerId || !refreshedProviderIds.has(s.providerId) || failedProviderIds.has(s.providerId))
   const combined = [...fresh, ...kept]
   const seen = new Set<string>()
   const out: Signal[] = []
   for (const s of combined) {
-    const k = s.title.toLowerCase().slice(0, 40)
+    // language 参与去重：HN/HF 为 zh locale 生成与 en 同标题的双语变体，
+    // 仅按 title 去重会把 zh 变体当重复项丢弃（B1 数据丢失）。
+    const k = `${s.title.toLowerCase().slice(0, 40)}|${s.language}`
     if (!seen.has(k)) { seen.add(k); out.push(s) }
   }
   return out
@@ -78,12 +88,13 @@ export function mergeSignals(prev: Signal[], fresh: Signal[], refreshedProviderI
 /**
  * 刷新指定 locale 的信号快照。
  * @param providerIds 只刷新这些 provider（缺省为全部）。用于后台分级轮询。
- * 全失败时：有旧快照返回旧快照（stale），否则 throw（由调用方降级 mock）。
+ * 全失败时：无论是否有旧快照都 throw（调用方用旧快照标记 stale 降级，见 aggregateSignals）；
+ * 部分失败时：失败 provider 的旧信号随 merged 保留，sourceHealth 记录 error。
  */
 export async function refreshLocale(locale: 'zh' | 'en', providerIds?: string[]): Promise<LocaleSnapshot> {
   const targets = providers.filter(p => !providerIds || providerIds.includes(p.id))
   const targetIds = new Set(targets.map(p => p.id))
-  const prev = snapshots.get(locale) ?? loadFromDisk()[locale]
+  const prev = snapshots.get(locale) ?? diskState[locale]
 
   const lockKey = `${locale}:${providerIds ? providerIds.join(',') : '*'}`
   const existing = inflight.get(lockKey)
@@ -94,6 +105,7 @@ export async function refreshLocale(locale: 'zh' | 'en', providerIds?: string[])
 
     const freshSignals: Signal[] = []
     const sourceHealth: Record<string, string> = { ...prev?.sourceHealth }
+    const failedIds = new Set<string>()
     let okCount = 0
     for (let i = 0; i < targets.length; i++) {
       const p = targets[i]
@@ -104,20 +116,24 @@ export async function refreshLocale(locale: 'zh' | 'en', providerIds?: string[])
         dataFreshness.recordUpdate(p.id, r.value.length)
         okCount++
       } else {
+        failedIds.add(p.id)
         sourceHealth[p.id] = 'error'
         dataFreshness.recordError(p.id, (r.reason as Error)?.message || 'Unknown error')
       }
     }
 
+    // 全失败：必须 throw，aggregateSignals 的 catch 分支才能置 staleUsed=true。
+    // 此前「有旧快照就 return prev」会让调用方误判为正常刷新（fromCache=false、staleUsed=false），
+    // 导致 /api/signals 永不返回 stale: true（B2）。
     if (okCount === 0) {
-      if (prev) return prev // 全部失败：保留旧快照，调用方标记 stale
       throw new Error('All providers failed')
     }
 
-    const merged = mergeSignals(prev?.signals ?? [], freshSignals, targetIds)
+    const merged = mergeSignals(prev?.signals ?? [], freshSignals, targetIds, failedIds)
     const snapshot: LocaleSnapshot = { signals: merged, fetchedAt: Date.now(), sourceHealth }
     snapshots.set(locale, snapshot)
-    saveToDisk({ ...loadFromDisk(), [locale]: snapshot })
+    diskState[locale] = snapshot
+    saveToDisk(diskState)
     return snapshot
   })()
 

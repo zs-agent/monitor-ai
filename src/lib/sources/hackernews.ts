@@ -39,6 +39,10 @@ export const hackernewsProvider: SignalProvider = {
     const res = await fetchWithTimeout(`${HN_API}/topstories.json`, {}, PER_REQUEST_TIMEOUT)
     if (!res.ok) throw new Error(`HN topstories HTTP ${res.status}`)
     const ids: number[] = await res.json()
+    // 空数组防护：把空结果当作失败，避免 0 条记为 ok 而清空该源既有快照内容
+    if (!Array.isArray(ids) || ids.length === 0) {
+      throw new Error('HN topstories returned empty list')
+    }
 
     // 分批取前 60 条详情，每批 10 个并发
     const items: RawHNItem[] = []
@@ -49,6 +53,11 @@ export const hackernewsProvider: SignalProvider = {
           items.push(r.value)
         }
       }
+    }
+
+    // 详情全部拉取失败也视为失败（同样会清空快照）
+    if (items.length === 0) {
+      throw new Error('HN item fetch returned no usable items')
     }
 
     const aiItems = items

@@ -7,7 +7,13 @@ import { useState, useEffect, useMemo } from 'react'
 import { getLocale, type Locale } from '@/lib/i18n'
 
 function findModel(name: string): LeaderboardEntry | undefined {
-  const decoded = decodeURIComponent(name)
+  let decoded: string
+  try {
+    decoded = decodeURIComponent(name)
+  } catch {
+    // 非法 % 编码的 URL（如 /model/100%）不应抛异常，按未找到处理 → 404 页
+    return undefined
+  }
   return LEADERBOARD_INTL.find(m => m.model === decoded) || LEADERBOARD_CN.find(m => m.model === decoded)
 }
 
