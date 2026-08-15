@@ -10,6 +10,8 @@ export interface LocaleSnapshot {
   signals: Signal[]
   fetchedAt: number
   sourceHealth: Record<string, string>
+  /** 全源刷新失败、返回的是过期快照 */
+  stale?: boolean
 }
 
 export interface AggregateOutcome {
@@ -69,7 +71,9 @@ export function mergeSignals(prev: Signal[], fresh: Signal[], refreshedProviderI
   const seen = new Set<string>()
   const out: Signal[] = []
   for (const s of combined) {
-    const k = s.title.toLowerCase().slice(0, 40)
+    // 去重 key 含 language：同一标题的 en/zh 变体视为两条信号，
+    // 否则 zh 侧信号会被先出现的 en 版本顶掉，applyFilters 后 HN/HF 内容在 zh 侧全丢
+    const k = `${s.language}:${s.title.toLowerCase().slice(0, 40)}`
     if (!seen.has(k)) { seen.add(k); out.push(s) }
   }
   return out
@@ -110,7 +114,8 @@ export async function refreshLocale(locale: 'zh' | 'en', providerIds?: string[])
     }
 
     if (okCount === 0) {
-      if (prev) return prev // 全部失败：保留旧快照，调用方标记 stale
+      // 全部失败：保留旧快照并标记 stale，同时透出本次的 sourceHealth（各源均 error）
+      if (prev) return { ...prev, sourceHealth, stale: true }
       throw new Error('All providers failed')
     }
 
@@ -152,7 +157,7 @@ export async function aggregateSignals(locale: 'zh' | 'en', category: string): P
       fetchedAt: snapshot.fetchedAt,
       sourceHealth: snapshot.sourceHealth,
       fromCache: false,
-      staleUsed: false,
+      staleUsed: snapshot.stale === true,
       fallbackMock: false,
     }
   } catch {

@@ -15,7 +15,7 @@ export interface RawHFPaper {
   title: string
   url: string
   upvotes: number
-  createdAt: string
+  publishedAt: string
 }
 
 export interface RawGitHubRepo {
@@ -118,7 +118,7 @@ export function normalizeHFPaper(paper: RawHFPaper, locale: 'zh' | 'en'): Signal
     summary: `${paper.upvotes} upvotes on HuggingFace · Daily Papers`,
     source: 'HuggingFace',
     sourceUrl: paper.url,
-    publishedAt: paper.createdAt,
+    publishedAt: paper.publishedAt,
     category: 'papers',
     country: inferCountry(paper.title),
     credibility: sourceCredibility('huggingface'),
