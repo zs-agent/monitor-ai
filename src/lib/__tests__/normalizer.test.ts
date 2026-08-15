@@ -43,7 +43,7 @@ describe('normalizeHNSignal', () => {
 })
 
 describe('normalizeHFPaper', () => {
-  const paper = { id: 'hf-abc', title: 'Deep Learning Advances', url: 'https://huggingface.co/papers/abc', upvotes: 300, createdAt: '2026-07-25T00:00:00Z' }
+  const paper = { id: 'hf-abc', title: 'Deep Learning Advances', url: 'https://huggingface.co/papers/abc', upvotes: 300, publishedAt: '2026-07-25T00:00:00Z' }
   const signal = normalizeHFPaper(paper, 'en')
   it('creates valid signal', () => {
     expect(signal.id).toBe('hf-abc')

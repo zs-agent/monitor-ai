@@ -47,7 +47,7 @@ export interface IndicatorResponse {
   cached?: boolean
 }
 
-/** 预定义的宏观指标清单（首期 7 个：4 个 World Bank + 3 个 AI 原生） */
+/** 预定义的宏观指标清单（7 个 World Bank + 3 个 AI 原生，与 README、wb-snapshot.json 对齐） */
 export const PRESET_INDICATORS: IndicatorMeta[] = [
   {
     id: 'AI.PAPERS',
@@ -77,6 +77,16 @@ export const PRESET_INDICATORS: IndicatorMeta[] = [
     sourceOrganization: 'Hacker News',
     unit: 'stories per year',
     topic: ['AI Media', 'Public Interest'],
+    lastUpdated: '',
+  },
+  {
+    id: 'NY.GDP.MKTP.CD',
+    name: 'GDP (current US$)',
+    description: 'Gross domestic product is the total income earned through the production of goods and services in an economic territory during an accounting period. This indicator is expressed in current prices, meaning no adjustment has been made to account for price changes over time. Data are in current U.S. dollars.',
+    sourceNote: 'World Bank national accounts data, and OECD National Accounts data files.',
+    sourceOrganization: 'World Bank',
+    unit: 'current US$',
+    topic: ['Economy & Growth'],
     lastUpdated: '',
   },
   {
@@ -110,6 +120,16 @@ export const PRESET_INDICATORS: IndicatorMeta[] = [
     lastUpdated: '',
   },
   {
+    id: 'SE.XPD.TOTL.GD.ZS',
+    name: 'Government expenditure on education, total (% of GDP)',
+    description: 'General government expenditure on education (current, capital, and transfers) is expressed as a percentage of GDP. It includes expenditure funded by transfers from international sources to government.',
+    sourceNote: 'UNESCO Institute for Statistics (UIS).',
+    sourceOrganization: 'UNESCO',
+    unit: '% of GDP',
+    topic: ['Education'],
+    lastUpdated: '',
+  },
+  {
     id: 'TX.VAL.TECH.MF.ZS',
     name: 'High-technology exports (% of manufactured exports)',
     description: 'High-technology exports are products with high R&D intensity, such as aerospace, computers, pharmaceuticals, scientific instruments, and electrical machinery.',
@@ -117,6 +137,16 @@ export const PRESET_INDICATORS: IndicatorMeta[] = [
     sourceOrganization: 'United Nations',
     unit: '% of manufactured exports',
     topic: ['Trade', 'Science & Technology'],
+    lastUpdated: '',
+  },
+  {
+    id: 'NE.TRD.GNFS.ZS',
+    name: 'Trade (% of GDP)',
+    description: 'Trade is the sum of exports and imports of goods and services, expressed as a percentage of GDP.',
+    sourceNote: 'World Bank national accounts data, and OECD National Accounts data files.',
+    sourceOrganization: 'World Bank',
+    unit: '% of GDP',
+    topic: ['Economy & Growth', 'Trade'],
     lastUpdated: '',
   },
 ]

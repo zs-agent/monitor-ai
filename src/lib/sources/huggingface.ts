@@ -19,7 +19,8 @@ export const huggingfaceProvider: SignalProvider = {
       title: p.title || p.paper?.title || '',
       url: `https://huggingface.co/papers/${p.id || p.paper?.id || ''}`,
       upvotes: p.upvotes || p.paper?.upvotes || 0,
-      createdAt: p.createdAt || p.paper?.createdAt || new Date().toISOString(),
+      // HF daily_papers 返回的是 publishedAt；读 createdAt 恒为 undefined 导致全部落回当前时间
+      publishedAt: p.publishedAt || p.paper?.publishedAt || new Date().toISOString(),
     }))
 
     const signals: Signal[] = []
