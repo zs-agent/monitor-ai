@@ -1,4 +1,5 @@
 import { fetchWithTimeout } from '@/lib/fetch-with-timeout'
+import { GLOBAL_COUNTRY } from './ai-indicators'
 import type { IndicatorMeta, IndicatorValue, IndicatorQuery, IndicatorResponse } from '@/types/indicator'
 import { PRESET_INDICATORS } from '@/types/indicator'
 import snapshotData from '@/data/wb-snapshot.json'
@@ -112,7 +113,10 @@ function buildResponse(
   meta: IndicatorMeta | null,
   error?: string,
 ): IndicatorResponse {
-  const missingInfo = query.countries.map(code => {
+  // 全球口径指标返回 WLD 单序列：缺失信息按 WLD 计算，不再把请求的国家逐列报成全部缺失
+  const globalScope = values.some(v => v.country === GLOBAL_COUNTRY) || !!meta?.globalScope
+  const scopeCountries = globalScope ? [GLOBAL_COUNTRY] : query.countries
+  const missingInfo = scopeCountries.map(code => {
     const countryValues = values.filter(v => v.country === code)
     const presentYears = new Set(countryValues.map(v => v.year))
     const allYears: number[] = []
@@ -120,7 +124,13 @@ function buildResponse(
     const missingYears = allYears.filter(y => !presentYears.has(y))
     return { country: code, missingYears }
   })
-  return { meta, values, missingInfo, fetchedAt: new Date().toISOString(), ...(error ? { error } : {}) }
+  return {
+    meta: meta && globalScope ? { ...meta, globalScope: true } : meta,
+    values,
+    missingInfo,
+    fetchedAt: new Date().toISOString(),
+    ...(error ? { error } : {}),
+  }
 }
 
 /** 获取指标元数据（优先本地，其次 API） */

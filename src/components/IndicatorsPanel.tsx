@@ -111,14 +111,16 @@ export default function IndicatorsPanel({ locale }: Props) {
     return m
   }, [locale])
 
+  const globalLabel = T('全球', 'Global', locale)
+
   // Missing info text
   const missingText = useMemo(() => {
     if (!data?.missingInfo) return ''
     const parts = data.missingInfo
       .filter(m => m.missingYears.length > 0)
-      .map(m => `${countryNameMap[m.country] || m.country}: ${m.missingYears.join(', ')}`)
+      .map(m => `${m.country === 'WLD' ? globalLabel : countryNameMap[m.country] || m.country}: ${m.missingYears.join(', ')}`)
     return parts.join('; ')
-  }, [data, countryNameMap])
+  }, [data, countryNameMap, globalLabel])
 
   // CSV download
   const downloadCSV = () => {
@@ -134,6 +136,35 @@ export default function IndicatorsPanel({ locale }: Props) {
   }
 
   const meta = data?.meta || selectedIndicator
+
+  // 全球口径指标（AI.GITHUB / AI.NEWS）：数据源无国家维度，返回 WLD 单序列，UI 只画一条"全球"线
+  const isGlobal = useMemo(() => {
+    return !!meta?.globalScope || !!data?.values?.some(v => v.country === 'WLD')
+  }, [meta, data])
+
+  // 地图卡片：全球口径只出一张"全球"卡
+  const distributionCards = useMemo(() => {
+    if (isGlobal) {
+      const lastVal = data?.values?.filter(v => v.country === 'WLD' && v.value !== null).sort((a, b) => b.year - a.year)[0]
+      return [{ code: 'WLD', label: globalLabel, lastVal }]
+    }
+    return selectedCountries.map(code => {
+      const lastVal = data?.values?.filter(v => v.country === code && v.value !== null).sort((a, b) => b.year - a.year)[0]
+      return { code, label: countryNameMap[code] || code, lastVal }
+    })
+  }, [isGlobal, data, selectedCountries, countryNameMap, globalLabel])
+
+  // 对比表行：全球口径只出一行"全球"
+  const tableRows = useMemo(() => {
+    if (isGlobal) {
+      const vals = data?.values?.filter(v => v.country === 'WLD') || []
+      return [{ code: 'WLD', label: globalLabel, valMap: new Map(vals.map(v => [v.year, v.value])) }]
+    }
+    return selectedCountries.map(code => {
+      const vals = data?.values?.filter(v => v.country === code) || []
+      return { code, label: countryNameMap[code] || code, valMap: new Map(vals.map(v => [v.year, v.value])) }
+    })
+  }, [isGlobal, data, selectedCountries, countryNameMap, globalLabel])
 
   // Max value for marker scaling
   const maxVal = useMemo(() => {
@@ -187,10 +218,13 @@ export default function IndicatorsPanel({ locale }: Props) {
             <button
               key={c.code}
               onClick={() => toggleCountry(c.code)}
+              disabled={isGlobal}
               className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors ${
-                selectedCountries.includes(c.code)
-                  ? 'bg-[#06b6d4]/20 border-[#06b6d4] text-accent'
-                  : 'bg-elevated border-edge-light text-muted hover:border-muted'
+                isGlobal
+                  ? 'opacity-40 pointer-events-none border-edge-light text-muted'
+                  : selectedCountries.includes(c.code)
+                    ? 'bg-[#06b6d4]/20 border-[#06b6d4] text-accent'
+                    : 'bg-elevated border-edge-light text-muted hover:border-muted'
               }`}
             >
               {locale === 'zh' ? c.nameZh : c.name}
@@ -224,7 +258,9 @@ export default function IndicatorsPanel({ locale }: Props) {
       {/* Indicator Metadata Row */}
       {meta && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mb-3 text-[10px] bg-card rounded p-2 border border-edge">
-          <div><span className="text-muted">{T('指标', 'Indicator', locale)}</span><br /><span className="text-ink">{meta.name}</span></div>
+          <div><span className="text-muted">{T('指标', 'Indicator', locale)}</span><br /><span className="text-ink">{meta.name}</span>{isGlobal && (
+            <span className="ml-1 text-[8px] px-1 py-px rounded bg-cyan-400/10 text-accent border border-cyan-400/20">{T('全球口径', 'Global scope', locale)}</span>
+          )}</div>
           <div><span className="text-muted">{T('代码', 'Code', locale)}</span><br /><span className="text-ink">{meta.id}</span></div>
           <div><span className="text-muted">{T('来源', 'Source', locale)}</span><br /><span className="text-ink">{meta.sourceOrganization}</span></div>
           <div><span className="text-muted">{T('单位', 'Unit', locale)}</span><br /><span className="text-ink">{meta.unit || '—'}</span></div>
@@ -239,31 +275,28 @@ export default function IndicatorsPanel({ locale }: Props) {
         <div className="bg-sidebar rounded border border-edge p-2 min-h-[200px] relative">
           <div className="text-[10px] font-semibold text-muted uppercase tracking-wider mb-2">{T('国家分布', 'Country Distribution', locale)}</div>
           <div className="flex flex-wrap gap-2">
-            {selectedCountries.map(code => {
-              const lastVal = data?.values?.filter(v => v.country === code && v.value !== null).sort((a, b) => b.year - a.year)[0]
-              return (
-                <div key={code} className="flex-1 min-w-[120px] bg-card rounded p-2 border border-edge">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <span className="text-[11px] font-medium text-ink">{countryNameMap[code] || code}</span>
-                  </div>
-                  <div className="text-[20px] font-light text-accent">
-                    {lastVal ? fmt(lastVal.value, meta?.unit || '') : '—'}
-                  </div>
-                  <div className="text-[9px] text-muted">
-                    {lastVal ? `${T('最新', 'Latest', locale)}: ${lastVal.year}` : T('无数据', 'No data', locale)}
-                  </div>
-                  {/* Value bar */}
-                  {lastVal?.value !== null && lastVal?.value !== undefined && (
-                    <div className="mt-1 h-1 bg-hover rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-[#06b6d4] rounded-full transition-all"
-                        style={{ width: `${((lastVal.value as number) / maxVal) * 100}%` }}
-                      />
-                    </div>
-                  )}
+            {distributionCards.map(({ code, label, lastVal }) => (
+              <div key={code} className="flex-1 min-w-[120px] bg-card rounded p-2 border border-edge">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <span className="text-[11px] font-medium text-ink">{label}</span>
                 </div>
-              )
-            })}
+                <div className="text-[20px] font-light text-accent">
+                  {lastVal ? fmt(lastVal.value, meta?.unit || '') : '—'}
+                </div>
+                <div className="text-[9px] text-muted">
+                  {lastVal ? `${T('最新', 'Latest', locale)}: ${lastVal.year}` : T('无数据', 'No data', locale)}
+                </div>
+                {/* Value bar */}
+                {lastVal?.value !== null && lastVal?.value !== undefined && (
+                  <div className="mt-1 h-1 bg-hover rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-[#06b6d4] rounded-full transition-all"
+                      style={{ width: `${((lastVal.value as number) / maxVal) * 100}%` }}
+                    />
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         </div>
 
@@ -300,7 +333,17 @@ export default function IndicatorsPanel({ locale }: Props) {
                   labelStyle={{ color: '#e5e5e5' }}
                 />
                 <Legend wrapperStyle={{ fontSize: 10 }} />
-                {selectedCountries.map((code, i) => {
+                {isGlobal ? (
+                  <Line
+                    type="monotone"
+                    dataKey="WLD"
+                    name={globalLabel}
+                    stroke="#06b6d4"
+                    strokeWidth={1.5}
+                    dot={{ r: 2 }}
+                    connectNulls
+                  />
+                ) : selectedCountries.map((code, i) => {
                   const colors = ['#06b6d4', '#f59e0b', '#22c55e', '#ef4444', '#a855f7', '#ec4899', '#6366f1', '#14b8a6', '#f97316', '#e11d48', '#8b5cf6', '#0ea5e9']
                   return (
                     <Line
@@ -347,20 +390,16 @@ export default function IndicatorsPanel({ locale }: Props) {
               </tr>
             </thead>
             <tbody>
-              {selectedCountries.map(code => {
-                const countryVals = data?.values?.filter(v => v.country === code) || []
-                const valMap = new Map(countryVals.map(v => [v.year, v.value]))
-                return (
-                  <tr key={code} className="border-b border-edge-50 hover:bg-card transition-colors">
-                    <td className="py-1 pr-2 text-ink font-medium">{countryNameMap[code] || code}</td>
-                    {years.map(y => (
-                      <td key={y} className={`text-right py-1 px-1.5 ${valMap.get(y) !== null && valMap.get(y) !== undefined ? 'text-ink-2' : 'text-muted italic'}`}>
-                        {valMap.get(y) !== null && valMap.get(y) !== undefined ? fmt(valMap.get(y) as number, meta?.unit || '') : '—'}
-                      </td>
-                    ))}
-                  </tr>
-                )
-              })}
+              {tableRows.map(({ code, label, valMap }) => (
+                <tr key={code} className="border-b border-edge-50 hover:bg-card transition-colors">
+                  <td className="py-1 pr-2 text-ink font-medium">{label}</td>
+                  {years.map(y => (
+                    <td key={y} className={`text-right py-1 px-1.5 ${valMap.get(y) !== null && valMap.get(y) !== undefined ? 'text-ink-2' : 'text-muted italic'}`}>
+                      {valMap.get(y) !== null && valMap.get(y) !== undefined ? fmt(valMap.get(y) as number, meta?.unit || '') : '—'}
+                    </td>
+                  ))}
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
