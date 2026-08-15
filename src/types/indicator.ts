@@ -16,6 +16,8 @@ export interface IndicatorMeta {
   topic: string[]
   /** 数据更新时间（API 返回的 lastUpdated） */
   lastUpdated: string
+  /** 全球口径：数据源无国家维度，返回 WLD 单序列（UI 据此标注并只画一条线） */
+  globalScope?: boolean
 }
 
 /** 单条指标数据点 */
@@ -68,6 +70,7 @@ export const PRESET_INDICATORS: IndicatorMeta[] = [
     unit: 'repos per year',
     topic: ['Open Source', 'AI Development'],
     lastUpdated: '',
+    globalScope: true,
   },
   {
     id: 'AI.NEWS',
@@ -78,6 +81,7 @@ export const PRESET_INDICATORS: IndicatorMeta[] = [
     unit: 'stories per year',
     topic: ['AI Media', 'Public Interest'],
     lastUpdated: '',
+    globalScope: true,
   },
   {
     id: 'GB.XPD.RSDV.GD.ZS',
