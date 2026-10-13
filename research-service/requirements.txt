@@ -1,0 +1,5 @@
+# research-service 自身的依赖。上游 gpt-researcher 的依赖由 setup.ps1 一并安装。
+fastapi>=0.115
+uvicorn>=0.30
+python-dotenv>=1.0
+httpx>=0.28

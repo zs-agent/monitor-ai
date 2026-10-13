@@ -86,11 +86,14 @@ Open [http://localhost:3000](http://localhost:3000)
 src/
   app/              # Next.js App Router pages & API routes
     api/signals/    # Main signals aggregation endpoint (provider-based)
+    api/research/[[...path]]/  # BFF proxy → research-service（情报研究）
     api/github-trending/  # GitHub trending repos (lightweight)
     api/ai-papers/        # Semantic Scholar papers (lightweight)
-  components/       # UI components (unchanged from original)
+  components/       # UI components
+    research/       # 情报研究工作台（报告库 / 报告阅读 / 协作过程）
   data/             # Static data (mock signals, leaderboard)
   lib/
+    markdown.tsx    # 报告 Markdown 渲染（零依赖）
     sources/        # SignalProvider implementations
       types.ts      # Provider interface
       hackernews.ts
@@ -112,48 +115,31 @@ src/
 - Mock data never mixes into normal results (only as `fallback: 'mock'`)
 - External source failures are reported via `sourceHealth` and `SourceHealthPanel`
 
-## World Bank Macro Indicators
+## 情报研究（多智能体）
 
-The **Macro Indicators** module provides US–China AI industry context via the [World Bank Indicators API](https://datahelpdesk.worldbank.org/knowledgebase/articles/889392-about-the-indicators-api-documentation).
+`research-service/` 把 [gpt-researcher](https://github.com/assafelovic/gpt-researcher) 的 LangGraph 多智能体流水线挂到监测信号上：
+**信号 → 研究课题 → 规划章节 / 并行检索 / 评审改写 / 事实核查 / 成稿 → 带引用的中文技术情报报告**。
 
-### Data Sources
-
-| Indicator | Code | Source |
-|-----------|------|--------|
-| GDP (current US$) | `NY.GDP.MKTP.CD` | World Bank |
-| R&D expenditure (% of GDP) | `GB.XPD.RSDV.GD.ZS` | UNESCO |
-| Researchers in R&D (per million) | `SP.POP.SCIE.RD.P6` | UNESCO |
-| Internet users (% of population) | `IT.NET.USER.ZS` | ITU |
-| Education expenditure (% of GDP) | `SE.XPD.TOTL.GD.ZS` | UNESCO |
-| High-tech exports (% of manufactured) | `TX.VAL.TECH.MF.ZS` | UN Comtrade |
-| Trade (% of GDP) | `NE.TRD.GNFS.ZS` | World Bank |
-
-### API Usage
-
-```
-GET /api/indicators?indicator=NY.GDP.MKTP.CD&countries=USA,CHN&yearStart=2010&yearEnd=2023
-GET /api/indicators?action=list       # List all preset indicators
-GET /api/indicators?action=search&q=gdp  # Search indicators
-```
-
-### Data Model
-
-See `src/types/indicator.ts` — `IndicatorMeta`, `IndicatorValue`, `IndicatorResponse`.
-This model is designed for future integration with PostgreSQL, ECharts, and LangGraph QA pipelines.
-
-### License
-
-The World Bank Indicators API is free and open for non-commercial and commercial use under the [World Bank Terms of Use](https://www.worldbank.org/en/about/legal/terms-of-use-for-datasets). No wb_dashboard code has been copied or reused.
-
-### Offline Snapshot
-
-The project includes a **pre-built data snapshot** (`src/data/wb-snapshot.json`) covering 7 indicators × 8 countries × 14 years. The snapshot is loaded at build time, so the app works **without internet access** (no proxy/VPN needed on the server).
-
-To regenerate the snapshot (e.g., for newer data):
+- 前端入口：`/nexus` 观测中枢 = 多智能体情报工作台，两个页签 **看板 / 情报研究**（URL 直达：`/nexus?tab=dashboard|research`；旧的 `?tab=stream` 会回退到看板）。
+- 「看板」按类别分四组（面板保持平铺，只加分组标头）：
+  1. **态势研判** — 生态地图
+  2. **今日 AI 洞察**（一个模块两种视图，标头右侧切换）— **当日研判**：洞察 + 核心判断侧栏（含重点关注与新闻轮播）；**情报检索**：**情报浏览器**（同一批数据的三个维度视图：信号 / 厂商 / 模型，左列表右档案，列可排序）。两个视图都常驻挂载，切走再切回不丢筛选、选中与关注状态
+     - **洞察 → 检索 联动（结论给判断，检索给证据链）**：每个洞察分类行右侧「支撑信号 ▸」直接切到检索视图并打上该分类筛选；面板底部吸附一行「证据链 N 信号 · N 厂商 · N 模型 → 打开情报检索」，规模由浏览器实时上报
+  3. **模型与 Agent 技术** — 模型报告 · 竞技场 · Agent 紧箍咒
+  4. **开源生态** — Agent 开源雷达
+- 看板级能力：**信号时间窗**（顶部一处切换，地图/洞察/侧栏/浏览器同时生效）、**关注清单**（行尾 ☆，本机 localStorage）、**厂商对比**（行尾 ⇄，最多两家并排四个指标）、**保存视图**（当前筛选组合存本机，点名字套用）。
+- 实体档案页：`/entity/vendor/<id>`、`/entity/model/<id>` —— 面包屑 + 四个标签页（概览 / 时间线 / 关联 / 评估），可从浏览器右栏「完整档案 →」进入，并可「用这个实体发起研究」（跳到研究工作台并预填课题）。
+- 「情报研究」= 研究三栏（报告库 · 报告阅读 · 协作过程）。浏览器只访问 `/api/research/*`，由 Next 反代到 Python 服务，页面不直连。
+- 服务：`research-service/`（FastAPI + 上游仓库，版本锁定在 `pinned-commit.txt`，**未改动上游源码**）。
+- 运行记录落盘 `research-service/runs/<task_id>.json`（含报告全文与全部协作事件），服务重启后报告库仍在。
 
 ```bash
-# Requires internet / proxy on the build machine
-node scripts/generate-wb-snapshot.js
+# 1) 研究服务：先在 research-service/.env 填 DEEPSEEK_API_KEY，再启动
+cd research-service && .venv/Scripts/python.exe -m uvicorn service.app:app --host 127.0.0.1 --port 8000
+
+# 2) 前端
+npm run dev
 ```
 
-The `fetchIndicatorData` function in `src/lib/sources/worldbank.ts` loads snapshot first; if the requested indicator is not in the snapshot, it falls back to the live World Bank API.
+接口：`/health`、`GET /research/history`、`GET /research/history/{task_id}`、`POST /research`、`GET /research/{run_id}`、`GET /research/{run_id}/events`(SSE)。
+详细配置与边界见 `research-service/README.md`。

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { usePathname } from 'next/navigation'
 import { getLocale, type Locale } from '@/lib/i18n'
-import Sidebar from './Sidebar'
+import TopNav from './TopNav'
 import CommandPalette from '@/components/CommandPalette'
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
@@ -27,9 +27,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar locale={locale} onLocaleChange={handleLocaleChange} />
-      <main className="flex-1 overflow-y-auto bg-base main-content pt-11 lg:pt-0">{children}</main>
+    <div className="flex flex-col h-screen overflow-hidden">
+      <TopNav locale={locale} onLocaleChange={handleLocaleChange} />
+      <main className="flex-1 overflow-y-auto bg-base main-content">{children}</main>
       <CommandPalette locale={locale} />
     </div>
   )

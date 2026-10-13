@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { NAV_ITEMS, type PageSlug } from '@/lib/nav'
-import { PRESET_INDICATORS, COMMON_COUNTRIES } from '@/types/indicator'
 import type { Locale } from '@/lib/i18n'
 
 interface SearchItem {
@@ -59,30 +58,6 @@ export default function CommandPalette({ locale }: { locale: Locale }) {
       })
     })
 
-    // Indicators
-    PRESET_INDICATORS.forEach(ind => {
-      items.push({
-        id: `ind-${ind.id}`,
-        label: ind.name,
-        sublabel: `${ind.id} — ${ind.sourceOrganization}`,
-        icon: '▣',
-        category: locale === 'zh' ? '指标' : 'Indicators',
-        action: () => { router.push('/mirror'); setOpen(false) },
-      })
-    })
-
-    // Countries
-    COMMON_COUNTRIES.forEach(c => {
-      items.push({
-        id: `country-${c.code}`,
-        label: `${c.name} (${c.code})`,
-        sublabel: locale === 'zh' ? c.nameZh : c.name,
-        icon: '◉',
-        category: locale === 'zh' ? '国家' : 'Countries',
-        action: () => { router.push('/mirror'); setOpen(false) },
-      })
-    })
-
     // AI entities (hardcoded common ones for search)
     // 实体入口已移除：原实现点击全部跳 /pulse（无目标死入口），且与综合搜索（nexus 顶栏）功能重叠
     // 如需按实体定位，应接入 nexus 地图/详情联动后再恢复
@@ -131,7 +106,7 @@ export default function CommandPalette({ locale }: { locale: Locale }) {
             value={query}
             onChange={e => { setQuery(e.target.value); setActiveIdx(0) }}
             onKeyDown={handleKeyDown}
-            placeholder={locale === 'zh' ? '搜索页面、指标、国家或实体...' : 'Search pages, indicators, countries...'}
+            placeholder={locale === 'zh' ? '搜索页面或实体...' : 'Search pages or entities...'}
             className="flex-1 bg-transparent text-[14px] text-ink outline-none placeholder-dim"
           />
           <kbd className="text-[10px] text-dim bg-hover px-1.5 py-0.5 rounded">ESC</kbd>

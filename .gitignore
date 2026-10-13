@@ -12,3 +12,10 @@ Thumbs.db
 secrets*.txt
 # 部署产物（二进制，不入库）
 deploy/*.tar.gz
+# research-service：上游克隆、虚拟环境、密钥、运行产物都不入库
+research-service/gpt-researcher/
+research-service/.venv/
+research-service/.env
+research-service/outputs/
+research-service/runs/
+research-service/**/__pycache__/

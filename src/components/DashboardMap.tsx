@@ -1,14 +1,26 @@
 ﻿'use client'
 
-import { useEffect, useState, useMemo, useRef, memo } from 'react'
+import { Fragment, useCallback, useEffect, useState, useMemo, useRef, memo } from 'react'
 import { type Locale } from '@/lib/i18n'
-import { useTheme } from '@/lib/theme'
 import type { Signal } from '@/types/signal'
 import { AI_HUBS, type AiLocation } from '@/data/ai-locations'
 import { ECOSYSTEM_ENTITIES, TECH_CONNECTIONS, ECO_CONN_LABELS, ECO_CONN_COLORS, ECO_SUBTYPE_LABELS } from '@/data/agent-ecosystem'
 import PanelBase from './PanelBase'
 
 interface Props { locale: Locale; signals?: Signal[]; onSelectEntity?: (entity: AiLocation) => void }
+
+/**
+ * 动态 import 的 react-leaflet 里 map 实例只用到这几个方法。
+ * 这里声明最小结构类型，避免在业务代码里写 any（库边界的最窄契约）。
+ */
+interface LeafletMapLike {
+  getZoom: () => number
+  getContainer: () => HTMLElement
+  on: (event: string, handler: () => void) => void
+  off: (event: string, handler: () => void) => void
+  fitBounds: (bounds: [number, number][], options?: { padding?: [number, number]; animate?: boolean }) => void
+  latLngToContainerPoint: (latlng: [number, number]) => { x: number; y: number }
+}
 
 const AUX_HUBS: AiLocation[] = [
   { id: 'google-sf', name: 'Google AI', nameZh: '谷歌AI', lat: 37.789, lng: -122.390, type: 'company', country: 'US', city: 'San Francisco', cityZh: '旧金山', importance: 4, models: [] },
@@ -319,7 +331,6 @@ const LAYER_OPTIONS: { key: MapLayer; label: Record<string, string>; color: stri
 ]
 
 const DashboardMap = memo(function DashboardMap({ locale, signals, onSelectEntity }: Props) {
-  const { theme } = useTheme()
   const [MapComponents, setMapComponents] = useState<{
     MapContainer: React.ComponentType<any>
     TileLayer: React.ComponentType<any>
@@ -334,6 +345,16 @@ const DashboardMap = memo(function DashboardMap({ locale, signals, onSelectEntit
   const [mapLoadError, setMapLoadError] = useState(false)
   const [activeLayers, setActiveLayers] = useState<MapLayer[]>(['lab', 'agent-project', 'agent-platform', 'infra', 'company', 'research', 'signal', 'connection'])
   const [layerOpen, setLayerOpen] = useState(true)
+  // 悬停聚焦：高亮该节点的关系网、压暗其余；另配「只看重点」与「重置视图」两个工具
+  const [hoveredId, setHoveredId] = useState<string | null>(null)
+  const [focusOnly, setFocusOnly] = useState(false)
+  const [resetToken, setResetToken] = useState(0)
+  const [zoom, setZoom] = useState(2)
+  const [mapInstance, setMapInstance] = useState<LeafletMapLike | null>(null)
+  const [viewToken, setViewToken] = useState(0)
+  // 回调必须身份稳定：Controller 的 effect 依赖它们，用内联箭头会让 effect 每渲染重跑
+  // → setState → 再渲染，形成 "Maximum update depth exceeded" 死循环。
+  const handleMapMove = useCallback(() => setViewToken(t => t + 1), [])
 
   useEffect(() => {
     if (!document.querySelector('link[href*="leaflet"]')) {
@@ -366,8 +387,8 @@ const DashboardMap = memo(function DashboardMap({ locale, signals, onSelectEntit
       const toHub = getHubById(c.to)
       if (!fromHub || !toHub) return null
       const label = locale === 'zh' ? c.labelZh : c.labelEn
-      return { from: [fromHub.lat, fromHub.lng] as [number, number], to: [toHub.lat, toHub.lng] as [number, number], type: c.type, label }
-    }).filter(Boolean) as Array<{ from: [number, number]; to: [number, number]; type: string; label: string }>,
+      return { from: [fromHub.lat, fromHub.lng] as [number, number], to: [toHub.lat, toHub.lng] as [number, number], fromId: c.from, toId: c.to, type: c.type, label }
+    }).filter(Boolean) as Array<{ from: [number, number]; to: [number, number]; fromId: string; toId: string; type: string; label: string }>,
   [locale])
 
   const getHubConnections = useMemo(() => {
@@ -410,9 +431,10 @@ const DashboardMap = memo(function DashboardMap({ locale, signals, onSelectEntit
   const MapController = useMemo(() => {
     if (!MapComponents) return null
     const useMapHook = MapComponents.useMap
-    return function Controller({ bounds }: { bounds: [number, number][] }) {
-      const map = useMapHook()
-      const fittedRef = useRef(false)
+    return function Controller({
+      bounds, resetToken, onZoom, onReady, onMove,
+    }: { bounds: [number, number][]; resetToken: number; onZoom: (zoom: number) => void; onReady: (map: LeafletMapLike) => void; onMove: () => void }) {
+      const map = useMapHook() as LeafletMapLike
 
       useEffect(() => {
         const container = map.getContainer()
@@ -424,15 +446,62 @@ const DashboardMap = memo(function DashboardMap({ locale, signals, onSelectEntit
         return () => container.removeEventListener('wheel', onWheel)
       }, [map])
 
+      // 把地图实例与视图变化报给父组件：标签密度按缩放分级、按屏幕位置去重叠
       useEffect(() => {
-        if (fittedRef.current || bounds.length < 2) return
-        fittedRef.current = true
-        map.fitBounds(bounds, { padding: [8, 8], animate: false })
-      }, [map, bounds])
+        onReady(map)
+        const report = () => { onZoom(map.getZoom()); onMove() }
+        report()
+        map.on('zoomend', report)
+        map.on('moveend', onMove)
+        return () => { map.off('zoomend', report); map.off('moveend', onMove) }
+      }, [map, onZoom, onReady, onMove])
+
+      // 挂载时贴合全部据点；resetToken 变化（点「重置视图」）时重来一次。
+      // padding 留边，避免据点贴在面板边缘上。
+      useEffect(() => {
+        if (bounds.length < 2) return
+        map.fitBounds(bounds, { padding: [28, 28], animate: false })
+      }, [map, bounds, resetToken])
 
       return null
     }
   }, [MapComponents])
+
+  // 可见据点 = 图层开关 ∩ 「只看重点」；以及悬停聚焦的邻接集合。
+  // 这几个是 hooks，必须放在 early return 之前（放后面会破坏 hook 调用顺序）。
+  const visibleHubs = useMemo(() => {
+    const allowed = new Set(activeLayers)
+    return ALL_HUBS.filter(hub => allowed.has(hub.type as MapLayer) && (!focusOnly || hub.importance >= 4))
+  }, [activeLayers, focusOnly])
+  const visibleHubIds = useMemo(() => new Set(visibleHubs.map(h => h.id)), [visibleHubs])
+  const neighbors = useMemo(
+    () => (hoveredId ? new Set((getHubConnections.get(hoveredId) || []).map(c => c.otherId)) : null),
+    [hoveredId, getHubConnections],
+  )
+
+  // 标签按缩放分级：低缩放只显示最重要的据点，放大后逐步放开
+  const minLabelImportance = zoom >= 5 ? 3 : zoom >= 3 ? 4 : 5
+
+  // 屏幕空间去重叠：同一条水平带内按重要度优先占位，冲突的标签这一帧不画。
+  // 依赖 viewToken（缩放/平移后重算），所以拖动地图标签也不会糊在一起。
+  const labeledIds = useMemo(() => {
+    // viewToken 只用来触发重算：平移/缩放后标签的屏幕坐标会变，但它不参与计算本身
+    void viewToken
+    const candidates = visibleHubs.filter(h => h.importance >= minLabelImportance).sort((a, b) => b.importance - a.importance)
+    if (!mapInstance) return new Set(candidates.map(h => h.id))
+    const placed: { x: number; y: number; w: number }[] = []
+    const keep = new Set<string>()
+    for (const hub of candidates) {
+      const point = mapInstance.latLngToContainerPoint([hub.lat, hub.lng])
+      const name = locale === 'zh' ? hub.nameZh : hub.name
+      const box = { x: point.x + 6, y: point.y - 6, w: 6 * name.length + 12 }
+      const clash = placed.some(q => Math.abs(q.y - box.y) < 11 && box.x < q.x + q.w && q.x < box.x + box.w)
+      if (clash) continue
+      placed.push(box)
+      keep.add(hub.id)
+    }
+    return keep
+  }, [visibleHubs, minLabelImportance, mapInstance, locale, viewToken])
 
   if (!MapComponents) {
     return (
@@ -454,21 +523,10 @@ const DashboardMap = memo(function DashboardMap({ locale, signals, onSelectEntit
 
   const { MapContainer, TileLayer, CircleMarker, Polyline, Marker, Popup, Tooltip } = MapComponents
 
-  const filteredHubs = ALL_HUBS.filter(hub => {
-    if (hub.type === 'company' && isLayerActive('company')) return true
-    if (hub.type === 'research' && isLayerActive('research')) return true
-    if (hub.type === 'chip' && isLayerActive('chip')) return true
-    if (hub.type === 'datacenter' && isLayerActive('datacenter')) return true
-    if (hub.type === 'lab' && isLayerActive('lab')) return true
-    if (hub.type === 'agent-project' && isLayerActive('agent-project')) return true
-    if (hub.type === 'agent-platform' && isLayerActive('agent-platform')) return true
-    if (hub.type === 'infra' && isLayerActive('infra')) return true
-    if (hub.type === 'conference') return false
-    return false
-  })
-
   const showConnections = isLayerActive('connection')
   const showSignals = isLayerActive('signal')
+  const visibleLines = connectionLines.filter(l => visibleHubIds.has(l.fromId) && visibleHubIds.has(l.toId))
+  const hasFocus = hoveredId !== null
 
   return (
     <PanelBase
@@ -478,13 +536,31 @@ const DashboardMap = memo(function DashboardMap({ locale, signals, onSelectEntit
       collapsible
       className="h-full"
       headerExtra={
-        <button
-          onClick={() => setLayerOpen(!layerOpen)}
-          className="text-[9px] px-2 py-0.5 rounded border border-edge-light text-ink-2 hover:text-accent hover:border-[#06b6d4]/30 transition-colors flex items-center gap-1"
-        >
-          <span>{locale === 'zh' ? '图层' : 'Layers'}</span>
-          <span className="text-[9px]">{layerOpen ? '▲' : '▼'}</span>
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setFocusOnly(v => !v)}
+            title={locale === 'zh' ? '只显示 importance ≥ 4 的重点据点' : 'Show importance ≥ 4 hubs only'}
+            className={`text-[9px] px-2 py-0.5 rounded border transition-colors ${
+              focusOnly ? 'bg-accent-bg text-accent border-[#06b6d4]/40' : 'border-edge-light text-ink-2 hover:text-accent hover:border-[#06b6d4]/30'
+            }`}
+          >
+            {locale === 'zh' ? '只看重点' : 'Key hubs'}
+          </button>
+          <button
+            onClick={() => setResetToken(t => t + 1)}
+            title={locale === 'zh' ? '重新贴合全部据点' : 'Fit all hubs again'}
+            className="text-[9px] px-2 py-0.5 rounded border border-edge-light text-ink-2 hover:text-accent hover:border-[#06b6d4]/30 transition-colors"
+          >
+            {locale === 'zh' ? '重置视图' : 'Reset view'}
+          </button>
+          <button
+            onClick={() => setLayerOpen(!layerOpen)}
+            className="text-[9px] px-2 py-0.5 rounded border border-edge-light text-ink-2 hover:text-accent hover:border-[#06b6d4]/30 transition-colors flex items-center gap-1"
+          >
+            <span>{locale === 'zh' ? '图层' : 'Layers'}</span>
+            <span className="text-[9px]">{layerOpen ? '▲' : '▼'}</span>
+          </button>
+        </div>
       }
     >
       <div className="relative z-0 h-full min-h-0">
@@ -502,32 +578,53 @@ const DashboardMap = memo(function DashboardMap({ locale, signals, onSelectEntit
           zoomControl={false}
           attributionControl={false}
         >
-          {MapController && <MapController bounds={allBounds} />}
-          <TileLayer attribution='&copy; <a href="https://carto.com/">CARTO</a>' url={theme === 'light' ? 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png' : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'} />
+          {MapController && (
+            <MapController
+              bounds={allBounds}
+              resetToken={resetToken}
+              onZoom={setZoom}
+              onReady={setMapInstance}
+              onMove={handleMapMove}
+            />
+          )}
+          {/* 底图：CARTO 匿名瓦片已返回 "API Key required" 占位图；OSM 官方瓦片注记是各地本地文字（读不懂）；
+              高德的 style=8 实测返回 179B 空白瓦片。最终用高德 style=7（中文注记、国内直连、免 key），
+              深色主题由 globals.css 的滤镜压暗。
+              注意坐标系为 GCJ-02（全球/大洲视图无感，城市级会有几百米偏移）；需官方合规可换天地图 + key。 */}
+          <TileLayer
+            url="https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=7&x={x}&y={y}&z={z}"
+            subdomains={['1', '2', '3', '4']}
+            attribution='&copy; 高德地图 AutoNavi'
+          />
 
-          {/* Dynamic connection lines */}
-          {showConnections && connectionLines.map((conn, i) => {
+          {/* 关系连线：默认低调；悬停节点时只让它的关系网亮起来（88 条同时满显会糊成一团） */}
+          {showConnections && visibleLines.map((conn, i) => {
             const color = CONN_COLORS[conn.type] || '#555'
+            const active = hoveredId === conn.fromId || hoveredId === conn.toId
             const positions: [number, number][] = [conn.from, conn.to]
             return (
-              // 柔和底色 + 主流动线（双层，营造光带纵深）
-              ([
-                <Polyline key={`conn-base-${i}`} positions={positions} pathOptions={{ color, weight: 4, opacity: 0.1 }} />,
-                <Polyline key={`conn-flow-${i}`} positions={positions} pathOptions={{ color, weight: 1.6, opacity: 0.7, dashArray: '5 9', className: 'dash-flow-line' }}>
-                  <Tooltip direction="center" opacity={0.85}>
-                    <span className="text-[9px]">{conn.label}</span>
-                  </Tooltip>
-                </Polyline>,
-              ])
+              <Polyline
+                key={`conn-${conn.fromId}-${conn.toId}-${i}`}
+                positions={positions}
+                pathOptions={{
+                  color,
+                  weight: active ? 2.4 : 1,
+                  opacity: hasFocus ? (active ? 0.95 : 0.05) : 0.3,
+                  dashArray: active ? '5 9' : undefined,
+                  className: active ? 'dash-flow-line' : undefined,
+                }}
+              />
             )
           })}
 
-          {/* Connection line labels */}
+          {/* 连线类型标签：只在悬停聚焦时显示（原来的 88 个 7px 小字全时段挤在地图上） */}
           {showConnections && L && midMarkers.map((m, i) => {
+            const active = hoveredId === m.fromId || hoveredId === m.toId
+            if (!active) return null
             const color = CONN_COLORS[m.type] || '#555'
             const icon = L.divIcon({
               className: '',
-              html: `<div style="font-size:7px;color:${color};font-weight:600;white-space:nowrap;pointer-events:none">${m.label}</div>`,
+              html: `<div style="font-size:9px;color:${color};font-weight:600;white-space:nowrap;pointer-events:none;text-shadow:0 0 3px var(--bg-primary),0 0 3px var(--bg-primary)">${m.label}</div>`,
               iconSize: [70, 12],
               iconAnchor: [35, 6],
             })
@@ -535,7 +632,7 @@ const DashboardMap = memo(function DashboardMap({ locale, signals, onSelectEntit
           })}
 
           {/* AI Hub markers */}
-          {filteredHubs.map(hub => {
+          {visibleHubs.map(hub => {
             const isEco = hub.type === 'lab' || hub.type === 'agent-project' || hub.type === 'agent-platform' || hub.type === 'infra'
             const size = isEco
               ? (hub.importance >= 5 ? 10 : hub.importance >= 4 ? 9 : 7)
@@ -554,23 +651,40 @@ const DashboardMap = memo(function DashboardMap({ locale, signals, onSelectEntit
               ? (ECO_SUBTYPE_LABELS[hub.ecosystem.subtype as keyof typeof ECO_SUBTYPE_LABELS] || { en: hub.ecosystem.subtype, zh: hub.ecosystem.subtype })
               : null
 
+            // 悬停聚焦：自己放大、邻居保留标签、其余压暗
+            const emphasized = hoveredId === hub.id
+            const related = emphasized || (neighbors?.has(hub.id) ?? false)
+            const dim = hasFocus && !related
+            const drawnSize = emphasized ? size * 1.5 : (hasFocus && related ? size * 1.15 : size)
+
             return (
-              <CircleMarker
-                key={hub.id}
-                center={[hub.lat, hub.lng]}
-                radius={size}
-                pathOptions={{
-                  fillColor: color,
-                  fillOpacity: 1,
-                  // 高对比描边光晕：深色瓦片用浅色环、浅色瓦片用深色环，任何主题下都清晰
-                  color: 'var(--map-halo)',
-                  weight: isEco ? 2.5 : 2,
-                  opacity: 1,
-                }}
-                eventHandlers={{
-                  click: (e: { target: { openPopup: () => void } }) => e.target.openPopup(),
-                }}
-              >
+              <Fragment key={hub.id}>
+                {/* 重要据点加一圈柔光，层级一眼可辨 */}
+                {hub.importance >= 5 && (
+                  <CircleMarker
+                    center={[hub.lat, hub.lng]}
+                    radius={drawnSize + 5}
+                    pathOptions={{ fillColor: color, fillOpacity: dim ? 0.05 : 0.18, stroke: false }}
+                    interactive={false}
+                  />
+                )}
+                <CircleMarker
+                  center={[hub.lat, hub.lng]}
+                  radius={drawnSize}
+                  pathOptions={{
+                    fillColor: color,
+                    fillOpacity: dim ? 0.15 : 1,
+                    // 高对比描边光晕：深色瓦片用浅色环、浅色瓦片用深色环，任何主题下都清晰
+                    color: 'var(--map-halo)',
+                    weight: emphasized ? 3.5 : (isEco ? 2.5 : 2),
+                    opacity: dim ? 0.35 : 1,
+                  }}
+                  eventHandlers={{
+                    mouseover: () => setHoveredId(hub.id),
+                    mouseout: () => setHoveredId(null),
+                    click: (e: { target: { openPopup: () => void } }) => e.target.openPopup(),
+                  }}
+                >
                 <Popup>
                   <HubPopupContent
                     displayName={displayName}
@@ -588,7 +702,7 @@ const DashboardMap = memo(function DashboardMap({ locale, signals, onSelectEntit
                     onSelectEntity={onSelectEntity ? () => onSelectEntity(hub) : undefined}
                   />
                 </Popup>
-                <Tooltip direction="top" offset={[0, -size - 5]} opacity={0.9}>
+                <Tooltip direction="top" offset={[0, -drawnSize - 5]} opacity={0.9}>
                   <div style={{ fontSize: '10px' }}>
                     <div style={{ fontWeight: 600 }}>{displayName}</div>
                     <div style={{ fontSize: '8px', color: 'var(--text-secondary)' }}>{displayCity} · {typeDisplay}{ecoSubtype ? ` · ${isZh ? ecoSubtype.zh : ecoSubtype.en}` : ''} · {'●'.repeat(hub.importance)}</div>
@@ -599,7 +713,23 @@ const DashboardMap = memo(function DashboardMap({ locale, signals, onSelectEntit
                     )}
                   </div>
                 </Tooltip>
-              </CircleMarker>
+                </CircleMarker>
+
+                {/* 常显标签：重点据点一直显示名字，其余在悬停聚焦时显示；
+                    text-shadow 保证压在瓦片上也读得清 */}
+                {(labeledIds.has(hub.id) || (hasFocus && related)) && L && (
+                  <Marker
+                    position={[hub.lat, hub.lng]}
+                    interactive={false}
+                    icon={L.divIcon({
+                      className: '',
+                      html: `<div class="map-label" style="opacity:${dim ? 0.2 : 1}">${displayName}</div>`,
+                      iconSize: [0, 0],
+                      iconAnchor: [-drawnSize - 4, 4],
+                    })}
+                  />
+                )}
+              </Fragment>
             )
           })}
 
@@ -609,7 +739,7 @@ const DashboardMap = memo(function DashboardMap({ locale, signals, onSelectEntit
                 key={loc.id}
                 center={[loc.lat, loc.lng]}
                 radius={5}
-                pathOptions={{ fillColor: '#f59e0b', fillOpacity: 1, color: 'var(--map-halo)', weight: 2, opacity: 1, className: 'map-signal-dot' }}
+                pathOptions={{ fillColor: '#f59e0b', fillOpacity: 1, color: 'var(--map-halo)', weight: 2, opacity: hasFocus ? 0.15 : 1, className: 'map-signal-dot' }}
               eventHandlers={{
                 click: (e: { target: { openPopup: () => void } }) => e.target.openPopup(),
               }}
@@ -683,7 +813,11 @@ const DashboardMap = memo(function DashboardMap({ locale, signals, onSelectEntit
         <span className="flex items-center gap-1"><span className="w-1.5 h-0 rounded-sm border-t border-dashed border-[#f59e0b]/60 w-4" />Eval</span>
         <span className="flex items-center gap-1"><span className="w-1.5 h-0 rounded-sm border-t border-dashed border-[#fb7185]/60 w-4" />Deploy</span>
         <span className="flex items-center gap-1"><span className="w-1.5 h-0 rounded-sm border-t border-dashed border-[#ef4444]/60 w-4" />{locale === 'zh' ? '竞争' : 'Compete'}</span></>}
-        <span className="ml-auto">{filteredHubs.length} {locale === 'zh' ? '个可见据点' : 'visible hubs'}{showConnections ? ` · ${ALL_CONNECTIONS.length} ${locale === 'zh' ? '条连线' : 'connections'}` : ''}</span>
+        <span className="text-dim">{locale === 'zh' ? '底图 © 高德地图' : 'Basemap © AutoNavi'}</span>
+        <span className="text-dim hidden md:inline">
+          {locale === 'zh' ? '悬停据点看它的关系网 · 滚轮缩放 · 点击看详情' : 'Hover a hub to light up its network · scroll to zoom · click for details'}
+        </span>
+        <span className="ml-auto">{visibleHubs.length} {locale === 'zh' ? '个可见据点' : 'visible hubs'}{showConnections ? ` · ${visibleLines.length} ${locale === 'zh' ? '条连线' : 'connections'}` : ''}</span>
       </div>
     </PanelBase>
   )

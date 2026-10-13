@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { type Locale } from '@/lib/i18n'
 import type { Signal } from '@/types/signal'
 import PanelBase from './PanelBase'
+import type { BrowseCounts } from '@/lib/browse-view'
 import type { InsightsSnapshot } from '@/lib/insights/types'
 
 interface Props {
@@ -11,6 +12,17 @@ interface Props {
   /** 供精选标题点击时匹配完整信号对象（复用页面已有的详情抽屉） */
   signals?: Signal[]
   onSignalClick?: (s: Signal) => void
+  /** 模块标头已承担标题与控件时用：整块面板头去掉（避免留一条只有圆点的空栏） */
+  bare?: boolean
+  /** 模块标头的 ⟳：外层递一个自增数字触发重新生成（首帧不触发） */
+  refreshNonce?: number
+  /** 上报生成中状态，供模块标头的 ⟳ 显示进行中 */
+  onRefreshingChange?: (refreshing: boolean) => void
+  /** 分类下钻：把该分类的支撑信号交给「情报检索」视图看（结论 → 证据链） */
+  onDrillDown?: (category: string) => void
+  /** 检索规模：三个维度各有多少可挖，展示为「证据链」入口 */
+  evidence?: BrowseCounts | null
+  onOpenRetrieval?: () => void
 }
 
 const CATEGORY_LABEL: Record<string, [en: string, zh: string]> = {
@@ -29,7 +41,7 @@ const CATEGORY_COLOR: Record<string, string> = {
   tips: '#f472b6',
 }
 
-export default function InsightsPanel({ locale, signals, onSignalClick }: Props) {
+export default function InsightsPanel({ locale, signals, onSignalClick, bare = false, refreshNonce = 0, onRefreshingChange, onDrillDown, evidence = null, onOpenRetrieval }: Props) {
   const [snapshot, setSnapshot] = useState<InsightsSnapshot | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -71,6 +83,16 @@ export default function InsightsPanel({ locale, signals, onSignalClick }: Props)
     return () => clearInterval(id)
   }, [load])
 
+  // 模块标头的 ⟳：外层递自增数字触发重新生成（首帧不触发）
+  const lastRefreshRef = useRef(refreshNonce)
+  useEffect(() => {
+    if (refreshNonce === lastRefreshRef.current) return
+    lastRefreshRef.current = refreshNonce
+    load(true)
+  }, [refreshNonce, load])
+
+  useEffect(() => { onRefreshingChange?.(refreshing) }, [refreshing, onRefreshingChange])
+
   const formatTime = (ts: number): string => {
     const d = new Date(ts)
     return d.toLocaleTimeString(locale === 'zh' ? 'zh-CN' : 'en-US', { hour: '2-digit', minute: '2-digit' })
@@ -86,7 +108,8 @@ export default function InsightsPanel({ locale, signals, onSignalClick }: Props)
       error={error}
       onRetry={() => load(false)}
       className="h-full"
-      headerExtra={
+      bare={bare}
+      headerExtra={bare ? undefined : (
         <button
           className="panel-btn"
           onClick={() => load(true)}
@@ -95,7 +118,7 @@ export default function InsightsPanel({ locale, signals, onSignalClick }: Props)
         >
           {refreshing ? '…' : '⟳'}
         </button>
-      }
+      )}
     >
       <div className="flex-1 min-h-0 overflow-y-auto">
         {!snapshot ? (
@@ -122,6 +145,15 @@ export default function InsightsPanel({ locale, signals, onSignalClick }: Props)
                     <span className="text-[9px] text-muted">
                       {locale === 'zh' ? `基于 ${insight.coveredCount} 条信号` : `based on ${insight.coveredCount} signals`}
                     </span>
+                    {onDrillDown && insight.coveredCount > 0 && (
+                      <button
+                        onClick={() => onDrillDown(insight.category)}
+                        title={locale === 'zh' ? '在情报检索里按该分类看支撑信号' : 'See the supporting signals in retrieval'}
+                        className="ml-auto text-[9px] text-accent hover:opacity-80 transition-opacity whitespace-nowrap"
+                      >
+                        {locale === 'zh' ? '支撑信号 ▸' : 'Signals ▸'}
+                      </button>
+                    )}
                   </div>
                   {hasText ? (
                     <p className="text-[11px] leading-relaxed text-ink">{insight.text}</p>
@@ -166,10 +198,29 @@ export default function InsightsPanel({ locale, signals, onSignalClick }: Props)
                 </div>
               )
             })}
-            <div className="px-3 py-1.5 text-[9px] text-dim">
-              {snapshot.hasLlm
-                ? (locale === 'zh' ? `更新于 ${formatTime(snapshot.generatedAt)} · 每 30 分钟自动刷新` : `Updated ${formatTime(snapshot.generatedAt)} · refreshes every 30 min`)
-                : (locale === 'zh' ? '未配置 OPENAI_API_KEY，显示信号概览（配置后自动升级为 AI 洞察）' : 'OPENAI_API_KEY not set — showing signal overview')}
+            {/* 证据链入口吸附在面板底部：列表再长也不会把它挤出视野 */}
+            <div className="sticky bottom-0 bg-[var(--bg-card)] border-t border-edge-50">
+              {evidence && onOpenRetrieval && (
+                <button
+                  onClick={onOpenRetrieval}
+                  className="w-full group px-3 py-2 flex items-center gap-2 text-left hover:bg-hover transition-colors"
+                >
+                  <span className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted">
+                    {locale === 'zh' ? '证据链' : 'Evidence'}
+                  </span>
+                  <span className="text-[10px] font-mono text-ink-2 tabular-nums">
+                    {evidence.signals}{locale === 'zh' ? ' 信号 · ' : ' signals · '}{evidence.vendors}{locale === 'zh' ? ' 厂商 · ' : ' vendors · '}{evidence.models}{locale === 'zh' ? ' 模型' : ' models'}
+                  </span>
+                  <span className="ml-auto text-[9px] text-accent opacity-80 group-hover:opacity-100 whitespace-nowrap">
+                    {locale === 'zh' ? '打开情报检索 ▸' : 'Open retrieval ▸'}
+                  </span>
+                </button>
+              )}
+              <div className="px-3 py-1.5 text-[9px] text-dim">
+                {snapshot.hasLlm
+                  ? (locale === 'zh' ? `更新于 ${formatTime(snapshot.generatedAt)} · 每 30 分钟自动刷新` : `Updated ${formatTime(snapshot.generatedAt)} · refreshes every 30 min`)
+                  : (locale === 'zh' ? '未配置 OPENAI_API_KEY，显示信号概览（配置后自动升级为 AI 洞察）' : 'OPENAI_API_KEY not set — showing signal overview')}
+              </div>
             </div>
           </div>
         )}

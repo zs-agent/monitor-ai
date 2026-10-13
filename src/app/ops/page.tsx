@@ -96,7 +96,7 @@ export default function OpsPage() {
 
         <div className="bg-card border border-edge rounded p-3 text-[10px] text-muted">
           <div className="flex items-center gap-4 flex-wrap">
-            <span>API: /api/signals, /api/indicators, /api/agent-radar</span>
+            <span>API: /api/signals, /api/agent-radar</span>
             <span>{locale === 'zh' ? '缓存 TTL' : 'Cache TTL'}: 5min</span>
             <span>{locale === 'zh' ? '信号总数' : 'Total Signals'}: {signals.length}</span>
             {fetchedAt && <span>{locale === 'zh' ? '数据抓取时间' : 'Fetched at'}: {new Date(fetchedAt).toLocaleString()}</span>}

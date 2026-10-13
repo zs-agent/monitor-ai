@@ -22,6 +22,8 @@ interface PanelBaseProps {
   className?: string
   children?: ReactNode
   headerExtra?: ReactNode
+  /** bare：整块面板头都不要（标题/徽标/折叠都由外层模块承担时用，避免出现一条空标题栏） */
+  bare?: boolean
 }
 
 const RETRY_BASE_SECONDS = 15
@@ -42,6 +44,7 @@ export default function PanelBase({
   className = '',
   children,
   headerExtra,
+  bare = false,
 }: PanelBaseProps) {
   const [collapsed, setCollapsed] = useState(false)
 
@@ -108,10 +111,11 @@ export default function PanelBase({
 
   return (
     <div ref={panelRef} className={panelClasses} data-panel={id}>
-      <div className="panel-header">
+      {!bare && (
+        <div className="panel-header">
         <div className="panel-header-left">
           <span className={`panel-severity-dot severity-${severity}`} />
-          <span className="panel-title" title={title}>{title}</span>
+          {title && <span className="panel-title" title={title}>{title}</span>}
           {dataBadge && (
             <span className={`panel-data-badge ${dataBadge}`}>
               {dataBadgeDetail
@@ -147,6 +151,7 @@ export default function PanelBase({
           )}
         </div>
       </div>
+      )}
       <div className="panel-content min-h-0">
         {loading ? (
           <div className="panel-loading">

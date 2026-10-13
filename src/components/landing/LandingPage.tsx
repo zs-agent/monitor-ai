@@ -14,8 +14,8 @@ import ThemeToggle from '@/components/layout/ThemeToggle'
 type Dict = typeof COPY.en
 const COPY = {
   en: {
-    nav: { nexus: 'Nexus', pulse: 'Pulse', mirror: 'Mirror', ops: 'Ops', cta: 'Open console' },
-    hero: { eyebrow: 'the AI intelligence stream', headlineA: 'Watch the AI world', headlineB: 'as it moves.', sub: 'monitor.ai pulls global AI intelligence — news, papers, open-source repos, model releases, and US–China macro context — into one live console you can read at a glance.', primary: 'Enter the console', secondary: 'View the mirror' },
+    nav: { nexus: 'Nexus', ops: 'Ops', cta: 'Open console' },
+    hero: { eyebrow: 'the AI intelligence stream', headlineA: 'Watch the AI world', headlineB: 'as it moves.', sub: 'monitor.ai pulls global AI intelligence — news, papers, open-source repos, and model releases — into one live console you can read at a glance.', primary: 'Enter the console', secondary: 'View research' },
     stream: { title: 'monitor.ai — live stream', rows: [
       { t: 'OpenAI ships new agent runtime', tag: 'news', src: 'HN', sev: 'live' },
       { t: 'Qwen3-Max tops the arena', tag: 'model', src: 'arena', sev: 'live' },
@@ -24,24 +24,22 @@ const COPY = {
     ] },
     stats: [
       { n: '4', label: 'signal sources' },
-      { n: '7', label: 'macro indicators' },
+      { n: '10', label: 'agent roles' },
       { n: '60s', label: 'auto refresh' },
       { n: '2', label: 'languages' },
     ],
     features: [
-      { num: '01', title: 'NEXUS', head: 'One command center, the whole landscape.', body: 'A live map of AI agents across the globe. Every node carries its story — click in and it opens in the console. No switching tabs to see the big picture.', view: 'nexus' },
-      { num: '02', title: 'PULSE', head: 'The stream never stops.', body: 'A real-time feed of news, papers, open-source repos, and model moves as they land. Watch the timeline scroll, or search it in one keystroke.', view: 'pulse' },
-      { num: '03', title: 'MIRROR', head: 'US–China, side by side.', body: 'GDP, R&D spend, researchers, high-tech exports. Benchmark two economies against each other on the same indicators, same years, one screen.', view: 'mirror' },
-      { num: '04', title: 'INSIGHTS', head: 'A reading of the day, machine-made.', body: 'An LLM turns the raw feed into a summary and a judgment — what matters, why, and how much to trust the source. Credibility is always on the table.', view: 'nexus' },
-      { num: '05', title: 'OPS', head: 'Know when a source lies.', body: 'Every provider reports its own health. Live, cached, or stale is always visible, so a dead upstream never masquerades as silence in the signal.', view: 'ops' },
+      { num: '01', title: 'DASHBOARD', head: 'One command center, the whole landscape.', body: 'The signal stream with filters and tags, a live map of AI agents across the globe, daily insights, model reports and the arena — all on one board.', view: '/nexus?tab=dashboard' },
+      { num: '02', title: 'RESEARCH', head: 'Briefs with receipts.', body: 'A monitored signal becomes a research topic; a team of agents plans, researches, reviews and fact-checks it, then publishes a cited brief you can trace back to its sources.', view: '/nexus?tab=research' },
+      { num: '03', title: 'OPS', head: 'Know when a source lies.', body: 'Every provider reports its own health. Live, cached, or stale is always visible, so a dead upstream never masquerades as silence in the signal.', view: '/ops' },
     ],
     cta: { head: 'Give your radar a home.', sub: 'One page. Everything the AI world is doing, while it is doing it.', primary: 'Enter the console', hint: 'no signup · runs self-hosted' },
-    footer: { tag: 'built in the terminal', rights: '© 2026 monitor.ai', nexus: 'Nexus', pulse: 'Pulse', mirror: 'Mirror', ops: 'Ops' },
+    footer: { tag: 'built in the terminal', rights: '© 2026 monitor.ai', nexus: 'Nexus', ops: 'Ops' },
     viewLabel: 'OPEN',
   },
   zh: {
-    nav: { nexus: '观测中枢', pulse: '情报脉冲', mirror: '中美镜像', ops: '源网监控', cta: '进入控制台' },
-    hero: { eyebrow: 'AI 全球情报流', headlineA: '看 AI 世界', headlineB: '实时运转。', sub: 'monitor.ai 汇聚全球 AI 情报——新闻、论文、开源项目、模型发布与中美宏观环境——在一套实时控制台中一屏尽览。', primary: '进入控制台', secondary: '查看中美镜像' },
+    nav: { nexus: '观测中枢', ops: '源网监控', cta: '进入控制台' },
+    hero: { eyebrow: 'AI 全球情报流', headlineA: '看 AI 世界', headlineB: '实时运转。', sub: 'monitor.ai 汇聚全球 AI 情报——新闻、论文、开源项目与模型发布——在一套实时控制台中一屏尽览。', primary: '进入控制台', secondary: '查看情报研究' },
     stream: { title: 'monitor.ai — 实时流', rows: [
       { t: 'OpenAI 发布新一代 Agent 运行时', tag: '新闻', src: 'HN', sev: 'live' },
       { t: 'Qwen3-Max 登顶竞技场', tag: '模型', src: 'arena', sev: 'live' },
@@ -50,19 +48,17 @@ const COPY = {
     ] },
     stats: [
       { n: '4', label: '路数据源' },
-      { n: '7', label: '项宏观指标' },
+      { n: '10', label: '个智能体角色' },
       { n: '60s', label: '自动刷新' },
       { n: '2', label: '语言切换' },
     ],
     features: [
-      { num: '01', title: 'NEXUS', head: '一个中枢，纵览全貌。', body: '一张覆盖全球的 AI Agent 实时地图。每个节点都有自己的故事——点击即可在控制台展开，无需切换标签也能看清大局。', view: 'nexus' },
-      { num: '02', title: 'PULSE', head: '信号流永不停歇。', body: '新闻、论文、开源与模型动态的实时时间线，一落地便呈现。看它滚动，或一键搜索。', view: 'pulse' },
-      { num: '03', title: 'MIRROR', head: '中美镜像，同屏对照。', body: 'GDP、研发投入、科研人员、高技术出口。同一批指标、同一批年份，在同一个屏幕上比较两个经济体。', view: 'mirror' },
-      { num: '04', title: 'INSIGHTS', head: '机器撰写的当日研判。', body: '大模型把原始信号提炼成摘要与判断——什么重要、为什么、可信度几何。信源可信度始终摆在台面上。', view: 'nexus' },
-      { num: '05', title: 'OPS', head: '知道数据源何时说谎。', body: '每个数据源自报健康状态。实时、缓存或过期一目了然，上游宕机永远不会伪装成情报里的沉默。', view: 'ops' },
+      { num: '01', title: 'DASHBOARD', head: '一个中枢，纵览全貌。', body: '带筛选与标签的信号流、覆盖全球的 AI Agent 实时地图、当日洞察、模型报告与竞技场——同一块看板上一屏尽览。', view: '/nexus?tab=dashboard' },
+      { num: '02', title: 'RESEARCH', head: '结论背后有据可查。', body: '一条监测信号变成一个研究课题，多个智能体分工规划、检索、评审与事实核查，最后产出报告——每条结论都能追回它的来源。', view: '/nexus?tab=research' },
+      { num: '03', title: 'OPS', head: '知道数据源何时说谎。', body: '每个数据源自报健康状态。实时、缓存或过期一目了然，上游宕机永远不会伪装成情报里的沉默。', view: '/ops' },
     ],
     cta: { head: '给你的雷达安一个家。', sub: '一页尽览。AI 世界此刻正在发生的一切。', primary: '进入控制台', hint: '无需注册 · 可自托管' },
-    footer: { tag: '构建于终端', rights: '© 2026 monitor.ai', nexus: '观测中枢', pulse: '情报脉冲', mirror: '中美镜像', ops: '源网监控' },
+    footer: { tag: '构建于终端', rights: '© 2026 monitor.ai', nexus: '观测中枢', ops: '源网监控' },
     viewLabel: '查看',
   },
 }
@@ -91,51 +87,7 @@ function MapMock() {
   )
 }
 
-/* ---- 02 信号流模拟 ---- */
-function StreamMock() {
-  return (
-    <div className="rounded-lg border border-edge bg-base-50 font-mono text-[12px] overflow-hidden">
-      <div className="px-3 py-1.5 border-b border-edge text-[10px] text-muted uppercase tracking-widest flex justify-between">
-        <span>monitor.ai — live stream</span><span className="text-success">● live</span>
-      </div>
-      <div className="p-3 space-y-2">
-        <div className="flex items-center gap-2"><span className="text-accent">●</span><span>OpenAI ships new agent runtime</span><Tag label="news" sev="live" /></div>
-        <div className="flex items-center gap-2"><span className="text-accent">●</span><span>Qwen3-Max tops the arena</span><Tag label="model" sev="live" /></div>
-        <div className="flex items-center gap-2 opacity-70"><span className="text-success">●</span><span>128k-context paper published</span><Tag label="paper" sev="ok" /></div>
-        <div className="flex items-center gap-2 opacity-70"><span className="text-success">●</span><span>agent-framework trending</span><Tag label="repo" sev="ok" /></div>
-      </div>
-    </div>
-  )
-}
-
-/* ---- 03 中美对照模拟 ---- */
-function MirrorMock() {
-  const rows = [
-    { label: 'R&D / GDP', us: 72, cn: 64 },
-    { label: 'GDP (T$)', us: 100, cn: 82 },
-    { label: 'Hightech exp.', us: 46, cn: 88 },
-  ]
-  return (
-    <div className="rounded-lg border border-edge bg-base-50 p-3 space-y-3">
-      <div className="flex justify-between text-[10px] font-mono uppercase tracking-widest text-muted">
-        <span className="text-ink-2">US</span><span>research vs output</span><span className="text-accent">CN</span>
-      </div>
-      {rows.map(r => (
-        <div key={r.label}>
-          <div className="flex justify-between text-[10px] font-mono text-muted mb-1"><span>{r.label}</span></div>
-          <div className="flex items-center gap-1">
-            <div className="flex-1 flex justify-end"><div className="h-2 rounded bg-edge-light" style={{ width: `${r.us}%` }} /></div>
-            <span className="w-1.5" />
-            <div className="flex-1"><div className="h-2 rounded bg-accent" style={{ width: `${r.cn}%` }} /></div>
-          </div>
-        </div>
-      ))}
-      <div className="pt-1 border-t border-edge text-[10px] font-mono text-muted flex justify-between"><span>7 indicators</span><span className="text-accent">side by side →</span></div>
-    </div>
-  )
-}
-
-/* ---- 04 研判模拟 ---- */
+/* ---- 01 研判模拟 ---- */
 function InsightMock() {
   return (
     <div className="rounded-lg border border-edge bg-base-50 p-3 space-y-2">
@@ -183,7 +135,7 @@ export default function LandingPage() {
   }
 
   const t: Dict = COPY[locale]
-  const mocks = [<MapMock key="m1" />, <StreamMock key="m2" />, <MirrorMock key="m3" />, <InsightMock key="m4" />, <OpsMock key="m5" />]
+  const mocks = [<MapMock key="m1" />, <InsightMock key="m2" />, <OpsMock key="m3" />]
 
   return (
     <div className="min-h-screen bg-base text-ink overflow-x-hidden">
@@ -194,7 +146,7 @@ export default function LandingPage() {
             <span className="text-accent">monitor</span><span>.ai</span>
           </Link>
           <nav className="hidden md:flex items-center gap-6">
-            {(['nexus', 'pulse', 'mirror'] as const).map(k => (
+            {(['nexus', 'ops'] as const).map(k => (
               <Link key={k} href={`/${k}`} className="text-[13px] text-muted hover:text-ink transition-colors">{t.nav[k]}</Link>
             ))}
           </nav>
@@ -219,7 +171,7 @@ export default function LandingPage() {
           <Link href="/nexus" className="text-[15px] font-semibold bg-accent text-black rounded-md px-5 py-2.5 hover:bg-accent-dim hover:text-white transition-colors">
             {t.hero.primary} →
           </Link>
-          <Link href="/mirror" className="text-[15px] font-medium text-ink-2 border border-edge rounded-md px-5 py-2.5 hover:border-edge-light hover:text-ink transition-colors">
+          <Link href="/nexus?tab=research" className="text-[15px] font-medium text-ink-2 border border-edge rounded-md px-5 py-2.5 hover:border-edge-light hover:text-ink transition-colors">
             {t.hero.secondary}
           </Link>
         </div>
@@ -275,7 +227,7 @@ export default function LandingPage() {
                 </div>
                 <h2 className="text-2xl md:text-3xl font-bold tracking-tight leading-tight">{f.head}</h2>
                 <p className="mt-4 text-base text-ink-2 leading-relaxed">{f.body}</p>
-                <Link href={`/${f.view}`} className="mt-6 inline-flex items-center gap-1.5 text-[13px] font-medium text-accent hover:text-accent-dim transition-colors">
+                <Link href={f.view} className="mt-6 inline-flex items-center gap-1.5 text-[13px] font-medium text-accent hover:text-accent-dim transition-colors">
                   {t.viewLabel} {f.title} →
                 </Link>
               </div>
@@ -305,8 +257,6 @@ export default function LandingPage() {
           <span className="text-[12px] font-mono text-muted">{t.footer.tag} · {t.footer.rights}</span>
           <div className="flex items-center gap-5">
             <Link href="/nexus" className="text-[12px] text-muted hover:text-ink">{t.footer.nexus}</Link>
-            <Link href="/pulse" className="text-[12px] text-muted hover:text-ink">{t.footer.pulse}</Link>
-            <Link href="/mirror" className="text-[12px] text-muted hover:text-ink">{t.footer.mirror}</Link>
             <Link href="/ops" className="text-[12px] text-muted hover:text-ink">{t.footer.ops}</Link>
           </div>
         </div>

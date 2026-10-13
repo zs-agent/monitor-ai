@@ -144,6 +144,35 @@ pm2 logs monitor-ai --lines 20
 
 ---
 
+### 4.6 研究服务（多智能体，可选）
+
+`/research` 页面依赖 research-service（FastAPI + gpt-researcher）。它不跟 PM2 走，单独用 systemd 常驻：
+
+```bash
+# 1) 上传服务目录（本地执行；gpt-researcher/ 与 .venv/ 不入库，服务器上重装）
+rsync -avz --exclude 'gpt-researcher' --exclude '.venv' --exclude 'outputs' --exclude 'runs' \
+  research-service/ root@<SERVER_IP>:/opt/monitor-ai/research-service/
+
+# 2) 服务器上装依赖（Python 3.12）
+cd /opt/monitor-ai/research-service
+git clone --depth 1 https://github.com/assafelovic/gpt-researcher.git gpt-researcher
+python3.12 -m venv .venv
+.venv/bin/pip install --index-url https://pypi.tuna.tsinghua.edu.cn/simple \
+  -e gpt-researcher -r gpt-researcher/backend/requirements.txt -r requirements.txt
+cp .env.example .env      # 填 DEEPSEEK_API_KEY（检索器默认 openalex，免 key）
+
+# 3) 常驻
+cp /opt/monitor-ai/deploy/monitor-ai-research.service /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now monitor-ai-research
+curl -s http://127.0.0.1:8000/health     # 期望 llm_key_present: true
+```
+
+Nginx 侧已在 `deploy/nginx-monitor-ai.conf` 里为 `/api/research/` 单独配了 SSE 反代（关缓冲 + 3600s 读超时），改完执行 `nginx -t && systemctl reload nginx`。
+研究服务没起也不影响站点其余部分：`/research` 页面会显示"服务不可达 + 启动命令"，其他页面照常。
+
+---
+
 ## 第 5 步：配置 DNS
 
 在阿里云 DNS 控制台添加以下 A 记录：

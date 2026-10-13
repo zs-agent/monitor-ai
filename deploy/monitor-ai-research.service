@@ -1,0 +1,17 @@
+[Unit]
+Description=monitor-ai research service (gpt-researcher multi-agent)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/monitor-ai/research-service
+# 配置由应用自己 load_dotenv 读 research-service/.env，不在这里重复声明，
+# 避免两处配置来源漂移。
+ExecStart=/opt/monitor-ai/research-service/.venv/bin/python -m uvicorn service.app:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=5
+# 研究任务会长时间占用内存（LangGraph + 抓取），给出上限以便 OOM 时明确失败
+MemoryMax=2G
+
+[Install]
+WantedBy=multi-user.target

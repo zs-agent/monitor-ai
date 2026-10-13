@@ -253,6 +253,26 @@ a:hover { color: var(--accent-dim); }
   color: var(--accent);
 }
 
+/* 底图是高德的浅色中文地图；深色主题下把瓦片层压暗（只作用于 tile-pane，点位与连线在 overlay pane 不受影响）。
+   反色 + 色相回转是为了保住中文注记的对比度：深字浅底 → 浅字深底。 */
+[data-theme="dark"] .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.75) contrast(0.95) saturate(0.6);
+}
+
+/* 地图据点常显标签：不加背景块，用同色描边阴影保证压在瓦片上也读得清 */
+.map-label {
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.1;
+  white-space: nowrap;
+  pointer-events: none;
+  color: var(--text-primary);
+  text-shadow:
+    0 0 3px var(--bg-primary),
+    0 0 3px var(--bg-primary),
+    0 0 6px var(--bg-primary);
+}
+
 /* 地图点位：清晰优先，不做霓虹光晕（点靠 --map-halo 高对比描边成形）；信号点用轻微呼吸表达"实时" */
 .map-signal-dot {
   animation: signalPulse 2s ease-in-out infinite;
