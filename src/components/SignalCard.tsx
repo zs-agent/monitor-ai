@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { relativeSignalTime } from '@/lib/browse-data'
 import type { CardSignal } from '@/types/signal'
 import type { Locale } from '@/lib/i18n'
 
@@ -39,14 +40,7 @@ function sourceLabel(signal: CardSignal): string {
   }
 }
 
-function timeAgo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime()
-  const m = Math.floor(diff / 60000)
-  if (m < 60) return `${m}m`
-  const h = Math.floor(m / 60)
-  if (h < 24) return `${h}h`
-  return `${Math.floor(h / 24)}d`
-}
+
 
 export default function SignalCard({ signal, locale, onClick }: Props) {
   const accent = CATEGORY_ACCENTS[signal.category] || CATEGORY_ACCENTS.models
@@ -75,7 +69,7 @@ export default function SignalCard({ signal, locale, onClick }: Props) {
           )}
           {isHigh && (
             <span className="shrink-0 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider rounded bg-[#06b6d4]/10 text-accent border border-[#06b6d4]/15 animate-pulse-slow">
-              {locale === 'zh' ? '新' : 'New'}
+              {locale === 'zh' ? '高关注' : 'High value'}
             </span>
           )}
         </div>
@@ -92,7 +86,7 @@ export default function SignalCard({ signal, locale, onClick }: Props) {
           <span className="font-medium text-accent-60">{sourceLabel(signal)}</span>
           <span className="w-0.5 h-0.5 rounded-full bg-edge" />
           {/* Time */}
-          <span className="font-mono">{mounted ? timeAgo(signal.publishedAt) : '--'}</span>
+          <span className="font-mono">{mounted ? relativeSignalTime(signal.publishedAt, locale) : '--'}</span>
           <span className="w-0.5 h-0.5 rounded-full bg-edge" />
           {/* Category tag */}
           <span className={CATEGORY_TEXT[signal.category] || 'text-gray-400/70'}>

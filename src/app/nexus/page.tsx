@@ -15,6 +15,7 @@ import ShortlistStrip from '@/components/ShortlistStrip'
 import SectionHeading from '@/components/layout/SectionHeading'
 import InsightSidebar from '@/components/InsightSidebar'
 import InsightsPanel from '@/components/InsightsPanel'
+import { filterSignalScope, matchesQueries, signalText } from '@/lib/browse-data'
 import AgentRadarPanel from '@/components/AgentRadarPanel'
 import ModelReportsPanel from '@/components/ModelReportsPanel'
 import ArenaPanel from '@/components/ArenaPanel'
@@ -42,7 +43,7 @@ const SIGNAL_WINDOWS: { key: 'all' | '24h' | '7d' | '30d'; zh: string; en: strin
 
 /** 「今日 AI 洞察」模块的两种视图：先看研判，需要时切到检索；两者常驻挂载，切走再切回不丢状态 */
 const INSIGHT_VIEWS: ['brief' | 'browse', { zh: string; en: string }][] = [
-  ['brief', { zh: '当日研判', en: 'Brief' }],
+  ['brief', { zh: '动态概览', en: 'Brief' }],
   ['browse', { zh: '情报检索', en: 'Retrieval' }],
 ]
 
@@ -223,20 +224,11 @@ export default function NexusPage() {
 
   // 时间窗只作用在信号类视图上（服务端榜单/来源面板有各自的窗口，这里不动它们）
   const windowedSignals = useMemo(() => {
-    const ms = SIGNAL_WINDOWS.find(w => w.key === signalWindow)?.ms ?? 0
-    if (!ms) return signals
-    const cutoff = Date.now() - ms
-    return signals.filter(s => new Date(s.publishedAt).getTime() >= cutoff)
+    return filterSignalScope(signals, signalWindow)
   }, [signals, signalWindow])
 
   const filteredSignals = useMemo(() => {
-    if (!searchQuery) return windowedSignals
-    const q = searchQuery.toLowerCase()
-    return windowedSignals.filter(s =>
-      s.title.toLowerCase().includes(q) ||
-      s.summary.toLowerCase().includes(q) ||
-      s.tags?.some(t => t.toLowerCase().includes(q))
-    )
+    return windowedSignals.filter(s => matchesQueries(signalText(s), searchQuery))
   }, [windowedSignals, searchQuery])
 
   // 综合搜索点击模型 → 切到看板并定位该模型（滚动交给上面的 effect）
@@ -345,8 +337,8 @@ export default function NexusPage() {
 
       <SectionHeading
         locale={locale}
-        zh="今日 AI 洞察" en="Today's insights"
-        hint="当日研判 + 情报检索（信号 · 厂商 · 模型）" hintEn="daily read + retrieval (signals, vendors, models)"
+        zh={signalWindow === '24h' ? '近24小时 AI 洞察' : 'AI 洞察'} en="AI insights"
+        hint="随当前时间范围与搜索更新 · 资料可回查" hintEn="Current time range and search · traceable sources"
         actions={
           <div className="flex items-center gap-1.5">
             <div className="flex items-center gap-0.5">
@@ -379,11 +371,13 @@ export default function NexusPage() {
           两个视图都常驻挂载，切走再切回不丢各自的筛选、选中与关注状态。 */}
       <section className="px-5 pt-4">
         <div className={insightsView === 'brief' ? 'grid grid-cols-12 gap-3' : 'hidden'}>
-          <div className="col-span-12 lg:col-span-8 min-h-[440px] lg:h-[440px]">
+          <div className="col-span-12 lg:col-span-7 min-w-0 h-[600px]">
             <InsightsPanel
               bare
               locale={locale}
-              signals={windowedSignals}
+              signals={filteredSignals}
+              scope={signalWindow}
+              searchQuery={searchQuery}
               onSignalClick={setSelectedSignal}
               onDrillDown={drillToSignals}
               evidence={browseCounts}
@@ -392,7 +386,7 @@ export default function NexusPage() {
               onRefreshingChange={setInsightsRefreshing}
             />
           </div>
-          <div className="col-span-12 lg:col-span-4 min-h-[440px] lg:h-[440px]" style={{ height: '440px' }}>
+          <div className="col-span-12 lg:col-span-5 min-w-0 h-[640px] lg:h-[600px]">
             <InsightSidebar
               locale={locale}
               signals={filteredSignals}

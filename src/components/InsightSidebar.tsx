@@ -4,6 +4,9 @@ import { useMemo } from 'react'
 import type { Locale } from '@/lib/i18n'
 import type { Signal } from '@/types/signal'
 import NewsTimeline from './NewsTimeline'
+import { useLocalStore } from '@/lib/local-store'
+import { matchesQueries, signalText, selectFocusSignals, relativeSignalTime } from '@/lib/browse-data'
+const validFocusCount = (v: unknown): v is number => typeof v === 'number' && [3, 6, 10].includes(v)
 
 interface Props {
   locale: Locale
@@ -13,25 +16,17 @@ interface Props {
   dataState?: 'live' | 'cached' | 'stale' | 'static'
 }
 
-function timeAgo(iso: string): string {
-  const m = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
-  if (m < 60) return `${m}m`
-  if (m < 1440) return `${Math.floor(m / 60)}h`
-  return `${Math.floor(m / 1440)}d`
-}
 
 export default function InsightSidebar({ locale, signals, onSignalClick, searchQuery, dataState = 'live' }: Props) {
+  const [focusCount, setFocusCount] = useLocalStore('monitor-ai-focus-count', 6, validFocusCount)
   const filtered = useMemo(() => {
     if (!searchQuery) return signals
-    const q = searchQuery.toLowerCase()
-    return signals.filter(s =>
-      s.title.toLowerCase().includes(q) || s.summary.toLowerCase().includes(q) || s.tags?.some(t => t.toLowerCase().includes(q))
-    )
+    return signals.filter(s => matchesQueries(signalText(s), searchQuery))
   }, [signals, searchQuery])
 
   const topSignals = useMemo(
-    () => [...filtered].sort((a, b) => b.importance - a.importance || new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()).slice(0, 2),
-    [filtered],
+    () => selectFocusSignals(filtered, focusCount),
+    [filtered, focusCount],
   )
 
   const topTags = useMemo(() => {
@@ -52,12 +47,15 @@ export default function InsightSidebar({ locale, signals, onSignalClick, searchQ
   return (
     <div className="flex flex-col gap-3 h-full min-h-0">
       {/* 核心判断 + 趋势关键词（压缩合并） */}
-      <section className="bg-card border border-edge rounded-xl overflow-hidden shrink-0">
+      <section className="bg-card border border-edge rounded-xl overflow-hidden shrink-0 flex flex-col min-h-0 max-h-[250px]">
         <header className="flex items-center justify-between px-4 py-1.5 border-b border-edge">
           <h2 className="text-[12px] font-semibold text-ink">{locale === 'zh' ? '重点关注' : 'Focus'}</h2>
-          <span className="text-[10px] text-muted">{topSignals.length} {locale === 'zh' ? '条重点' : 'top'}</span>
+          <select aria-label={locale === 'zh' ? '重点关注条数' : 'Focus count'} value={focusCount} onChange={e => setFocusCount(Number(e.target.value))} className="text-[10px] text-muted bg-card border border-edge rounded px-1">
+            {[3, 6, 10].map(n => <option key={n} value={n}>{n}{locale === 'zh' ? '条' : ' items'}</option>)}
+          </select>
         </header>
-        <div className="divide-y divide-edge-60">
+        <p className="px-4 py-1 text-[9px] text-dim">{locale === 'zh' ? '按当前范围的重要度、时间自动排序；★可另存到关注清单。' : 'Ranked by importance and time in current scope. Star to follow.'}</p>
+        <div className="divide-y divide-edge-60 min-h-0 max-h-[160px] overflow-y-auto">
           {topSignals.length === 0 ? (
             <p className="px-4 py-3 text-[11px] text-muted">{locale === 'zh' ? '当前筛选下暂无重点信号' : 'No key signals under current filter'}</p>
           ) : topSignals.map((s, i) => {
@@ -68,7 +66,7 @@ export default function InsightSidebar({ locale, signals, onSignalClick, searchQ
                 <span className="text-[10px] font-bold text-accent font-mono">#{i + 1}</span>
                 <span className="text-[9px] px-1.5 py-px rounded-full border border-edge-light text-muted">{s.category}</span>
                 {s.importance >= 4 && <span className="text-[10px]">🔥</span>}
-                <span className="ml-auto text-[9px] text-dim font-mono">{timeAgo(s.publishedAt)}</span>
+                <span className="ml-auto text-[9px] text-dim font-mono">{relativeSignalTime(s.publishedAt, locale)}</span>
               </div>
               <p className="text-[12px] leading-snug text-ink group-hover:text-accent transition-colors line-clamp-1">{s.title}</p>
               {/* 性质说明：这条是干啥的 */}
@@ -90,7 +88,7 @@ export default function InsightSidebar({ locale, signals, onSignalClick, searchQ
       </section>
 
       {/* AI 新闻时间轴（占侧栏剩余全部空间，动态滚动） */}
-      <div className="flex-1 min-h-0">
+      <div className="flex-1 min-h-[320px]" data-news-slot>
         <NewsTimeline
           locale={locale}
           signals={filtered}

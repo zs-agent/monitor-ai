@@ -13,7 +13,7 @@ import { useRemoteData } from '@/lib/use-remote-data'
 import type { Signal } from '@/types/signal'
 import type { ModelReportItem } from '@/data/model-reports'
 import { VENDORS, computeVendorRows, type VendorDef, type VendorRow } from '@/lib/vendor-radar'
-import { entityTokens, matchedKeywords, matchesKeyword, sameEntity } from '@/lib/text-match'
+import { mentionsEntity, matchedKeywords, sameEntity } from '@/lib/text-match'
 
 export interface EntityProfileProps {
   kind: 'vendor' | 'model'
@@ -218,12 +218,7 @@ export default function EntityProfile({ kind, slug }: EntityProfileProps) {
   const entitySignals = useMemo(() => {
     if (kind === 'vendor') return vendorRow?.signals ?? []
     if (!model) return []
-    const tokens = entityTokens(model.name)
-    if (tokens.length === 0) return []
-    return signals.filter(s => {
-      const text = `${s.title} ${s.summary ?? ''}`
-      return tokens.some(t => matchesKeyword(text, t))
-    })
+    return signals.filter(s => s.sourceUrl === model.sourceUrl || mentionsEntity(`${s.title} ${s.summary ?? ''}`, model.name))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kind, vendorRow, model, signals])
 
@@ -475,7 +470,7 @@ export default function EntityProfile({ kind, slug }: EntityProfileProps) {
               <ul className="divide-y divide-edge-50">
                 {siblingModels.map(m => (
                   <li key={m.id}>
-                    <Link href={`/entity/model/${m.id}`} className="flex items-center gap-3 px-3 py-2.5 hover:bg-overlay transition-colors">
+                    <Link href={`/entity/model/${encodeURIComponent(m.id)}`} className="flex items-center gap-3 px-3 py-2.5 hover:bg-overlay transition-colors">
                       <span className="text-[11px] text-ink-2 flex-1 truncate">{m.name}</span>
                       <span className="text-[10px] text-muted shrink-0">{m.type}</span>
                       <span className="text-[10px] font-mono text-dim shrink-0">{m.date}</span>
@@ -588,7 +583,7 @@ export default function EntityProfile({ kind, slug }: EntityProfileProps) {
               <h1 className="text-[20px] font-bold text-ink truncate">{entityName}</h1>
             </div>
             <p className="mt-1 text-[11px] text-muted font-mono">
-              {subjectLabel}
+              {subjectLabel}{kind === 'model' && rep.data?.curated?.some(m => m.id === slug) && <span className="ml-2 text-warning">{zh ? '历史参考' : 'REF'}</span>}
               <span className="text-dim"> · </span>
               {kind === 'vendor'
                 ? (vendorRow ? `${zh ? '命中关键词' : 'key'} ${vendorRow.bestKey}` : (zh ? '命中关键词 —' : 'key —'))

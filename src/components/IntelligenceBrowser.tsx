@@ -14,9 +14,11 @@ import type { Signal } from '@/types/signal'
 import type { ModelReportItem } from '@/data/model-reports'
 import PanelBase from '@/components/PanelBase'
 import SignalCard from '@/components/SignalCard'
-import { computeVendorRows, type VendorRow } from '@/lib/vendor-radar'
-import { entityTokens, matchesKeyword, sameEntity } from '@/lib/text-match'
+import { VENDORS, computeVendorRows, type VendorRow } from '@/lib/vendor-radar'
+import { mentionsEntity, matchedKeywords, sameEntity } from '@/lib/text-match'
 import { shortlistKey, useLocalStore } from '@/lib/local-store'
+import { matchesQueries, signalText, modelCatalog, filterSignalScope } from '@/lib/browse-data'
+import { validBrowseViews, type SavedBrowseView as SavedView } from '@/lib/saved-browse-view'
 import type { BrowseCounts, BrowsePreset } from '@/lib/browse-view'
 
 type Dimension = 'signals' | 'vendors' | 'models'
@@ -61,22 +63,12 @@ interface Props {
   onCounts?: (counts: BrowseCounts) => void
 }
 
-interface SavedView {
-  id: string
-  name: string
-  dimension: Dimension
-  category: string
-  languageFilter: 'all' | 'zh' | 'en'
-  activeTags: string[]
-  signalSort: 'time' | 'importance' | 'credibility'
-  vendorDays: number
-}
 
 export default function IntelligenceBrowser({ locale, signals, loading, error, searchQuery = '', onSelectSignal, shortlist = [], onToggleShortlist, hideTitle = false, preset = null, onCounts }: Props) {
   const zh = locale === 'zh'
   const [dimension, setDimension] = useState<Dimension>('signals')
   /** 保存的视图（筛选组合）：本机偏好，存 localStorage */
-  const [views, setViews] = useLocalStore<SavedView[]>('monitor-ai-views', [])
+  const [views, setViews] = useLocalStore<SavedView[]>('monitor-ai-views', [], validBrowseViews)
   /** 厂商对比：最多两家，选中两家后在右栏并排比较 */
   const [compareIds, setCompareIds] = useState<string[]>([])
 
@@ -94,30 +86,29 @@ export default function IntelligenceBrowser({ locale, signals, loading, error, s
   const [selectedVendorId, setSelectedVendorId] = useState<string | null>(null)
 
   // ——— 模型维度 ———
-  const { data: arena } = useRemoteData<ArenaResponse>('/api/arena', [], { refreshInterval: 10 * 60 * 1000 })
-  const { data: reports } = useRemoteData<ReportsResponse>('/api/model-reports', [], { refreshInterval: 10 * 60 * 1000 })
+  const { data: arena, error: arenaError } = useRemoteData<ArenaResponse>('/api/arena', [], { refreshInterval: 10 * 60 * 1000 })
+  const { data: reports, error: reportsError, loading: reportsLoading } = useRemoteData<ReportsResponse>('/api/model-reports', [], { refreshInterval: 10 * 60 * 1000 })
+  const [includeReferences, setIncludeReferences] = useState(false)
   const [modelSort, setModelSort] = useState<{ key: 'date' | 'name' | 'vendor'; dir: SortDir }>({ key: 'date', dir: 'desc' })
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null)
 
   const signalRows = useMemo(() => {
-    let result = signals
-    const query = [searchQuery, drillQuery].filter(Boolean).join(' ').trim().toLowerCase()
-    if (query) {
-      result = result.filter(s =>
-        s.title.toLowerCase().includes(query) ||
-        s.summary.toLowerCase().includes(query) ||
-        s.tags?.some(t => t.toLowerCase().includes(query))
-      )
+    let result = signals.filter(s => matchesQueries(signalText(s), searchQuery))
+    if (drillQuery) {
+      const vendor = VENDORS.find(v => v.id === drillQuery)
+      result = vendor
+        ? filterSignalScope(result, vendorDays === 7 ? '7d' : '30d').filter(s => matchedKeywords(signalText(s), vendor.keys).length > 0)
+        : result.filter(s => matchesQueries(signalText(s), drillQuery))
     }
     if (category !== 'all') result = result.filter(s => s.category === category)
     if (languageFilter !== 'all') result = result.filter(s => s.language === languageFilter)
     if (activeTags.length > 0) result = result.filter(s => s.tags?.some(t => activeTags.includes(t)))
     return [...result].sort((a, b) => {
-      if (signalSort === 'importance') return b.importance - a.importance || new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
-      if (signalSort === 'credibility') return b.credibility - a.credibility || new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
-      return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+      if (signalSort === 'importance') return b.importance - a.importance || (Date.parse(b.publishedAt) || 0) - (Date.parse(a.publishedAt) || 0)
+      if (signalSort === 'credibility') return b.credibility - a.credibility || (Date.parse(b.publishedAt) || 0) - (Date.parse(a.publishedAt) || 0)
+      return (Date.parse(b.publishedAt) || 0) - (Date.parse(a.publishedAt) || 0)
     })
-  }, [signals, searchQuery, drillQuery, category, languageFilter, activeTags, signalSort])
+  }, [signals, searchQuery, drillQuery, vendorDays, category, languageFilter, activeTags, signalSort])
 
   const tagCounts = useMemo(() => {
     const counts = new Map<string, number>()
@@ -125,7 +116,7 @@ export default function IntelligenceBrowser({ locale, signals, loading, error, s
     return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 18)
   }, [signals])
 
-  const vendorStats = useMemo(() => computeVendorRows(signals, vendorDays), [signals, vendorDays])
+  const vendorStats = useMemo(() => computeVendorRows(signals.filter(s => matchesQueries(signalText(s), searchQuery)), vendorDays), [signals, vendorDays, searchQuery])
   const vendorRows = useMemo(() => {
     const rows = [...vendorStats.rows]
     const { key, dir } = vendorSort
@@ -140,16 +131,15 @@ export default function IntelligenceBrowser({ locale, signals, loading, error, s
   const selectedVendor: VendorRow | null = vendorRows.find(v => v.id === selectedVendorId) ?? null
 
   const modelRows = useMemo(() => {
-    const merged = [...(reports?.curated ?? []), ...(reports?.live ?? [])]
-    const seen = new Set<string>()
-    const rows = merged.filter(m => m.name && !seen.has(m.id) && seen.add(m.id))
+    const rows = modelCatalog(reports?.live ?? [], reports?.curated ?? [], includeReferences)
+      .filter(m => matchesQueries([m.name, m.vendor, m.keyChange].join(' '), searchQuery))
     const { key, dir } = modelSort
     rows.sort((a, b) => {
-      const cmp = key === 'name' ? a.name.localeCompare(b.name) : key === 'vendor' ? a.vendor.localeCompare(b.vendor) : a.date.localeCompare(b.date)
+      const cmp = key === 'name' ? a.name.localeCompare(b.name) : key === 'vendor' ? a.vendor.localeCompare(b.vendor) : (a.updatedAt || a.date).localeCompare(b.updatedAt || b.date)
       return dir === 'asc' ? cmp : -cmp
     })
     return rows
-  }, [reports, modelSort])
+  }, [reports, modelSort, includeReferences, searchQuery])
   const selectedModel = modelRows.find(m => m.id === selectedModelId) ?? null
 
   // 模型 → 竞技场各维度分数（名字写法不同，用归一化实体名比对：'DeepSeek-V3.2 系列' vs 'DeepSeek V3.2'）
@@ -163,24 +153,20 @@ export default function IntelligenceBrowser({ locale, signals, loading, error, s
   // 模型 → 相关信号：切词后要求词边界 + 丢掉短 token/停用词，避免 "pro" 命中 improve 这类假关联
   const modelSignals = useMemo(() => {
     if (!selectedModel) return []
-    const tokens = entityTokens(selectedModel.name)
-    if (tokens.length === 0) return []
-    return signals.filter(s => {
-      const text = `${s.title} ${s.summary ?? ''}`
-      return tokens.some(t => matchesKeyword(text, t))
-    }).slice(0, 8)
+    return signals.filter(s => s.sourceUrl === selectedModel.sourceUrl ||
+      mentionsEntity(signalText(s), selectedModel.name)).slice(0, 8)
   }, [selectedModel, signals])
 
   const count = dimension === 'signals' ? signalRows.length : dimension === 'vendors' ? vendorRows.length : modelRows.length
 
   const currentViewName = `${zh ? DIMENSIONS.find(d => d.id === dimension)?.zh : DIMENSIONS.find(d => d.id === dimension)?.en}` +
-    (dimension === 'signals' ? ` · ${category}` : dimension === 'vendors' ? ` · ${vendorDays}d` : '')
+    (dimension === 'signals' ? ` · ${category}${drillQuery ? ' · ' + drillQuery : ''}${activeTags.length ? ' · ' + activeTags.join(',') : ''}` : dimension === 'vendors' ? ` · ${vendorDays}d` : includeReferences ? ' · REF' : '')
 
   const saveCurrentView = () => {
     const view: SavedView = {
       id: `${Date.now().toString(36)}`,
       name: currentViewName,
-      dimension, category, languageFilter, activeTags, signalSort, vendorDays,
+      dimension, category, languageFilter, activeTags, signalSort, vendorDays, drillQuery, includeReferences,
     }
     setViews(prev => [...prev.filter(v => v.name !== view.name), view].slice(-6))
   }
@@ -192,13 +178,20 @@ export default function IntelligenceBrowser({ locale, signals, loading, error, s
     setActiveTags(view.activeTags)
     setSignalSort(view.signalSort)
     setVendorDays(view.vendorDays)
+    setDrillQuery(view.drillQuery ?? '')
+    setIncludeReferences(view.includeReferences ?? false)
+    setCompareIds([])
   }
 
   // 研判视图下钻：按预设切到信号维度 + 分类筛选（preset 每次是新对象，重复点同一分类也生效）
   useEffect(() => {
     if (!preset) return
+    setDrillQuery('')
+    setActiveTags([])
+    setLanguageFilter('all')
+    setCompareIds([])
     if (preset.dimension) setDimension(preset.dimension)
-    if (preset.category) setCategory(preset.category)
+    setCategory(preset.category ?? 'all')
   }, [preset])
 
   // 向上报三个维度的规模：研判视图/模块标头据此展示"检索里有多少可挖"
@@ -224,7 +217,7 @@ export default function IntelligenceBrowser({ locale, signals, loading, error, s
     <PanelBase
       id="intelligence-browser"
       title={hideTitle ? '' : zh ? '情报浏览器' : 'Intelligence Browser'}
-      dataBadge={error ? 'unavailable' : 'live'}
+      dataBadge={dimension === 'models' ? reportsError ? 'unavailable' : reports?.state === 'static' ? 'static' : reports?.state === 'stale' || reports?.state === 'partial' ? 'stale' : 'cached' : error ? 'unavailable' : 'cached'}
       count={count}
       collapsible
       className="flex flex-col h-full"
@@ -243,9 +236,10 @@ export default function IntelligenceBrowser({ locale, signals, loading, error, s
               {zh ? d.zh : d.en}
             </button>
           ))}
+          <button onClick={() => { setCategory('all'); setLanguageFilter('all'); setActiveTags([]); setDrillQuery(''); setCompareIds([]) }} className="text-[10px] px-2 py-1 text-muted hover:text-accent">{zh ? '清除筛选' : 'Clear filters'}</button>
           <button
             onClick={saveCurrentView}
-            title={zh ? `保存当前筛选组合：${currentViewName}` : `Save current filters: ${currentViewName}`}
+            title={zh ? `保存面板筛选（不含顶部搜索）：${currentViewName}` : `Save current filters: ${currentViewName}`}
             className="ml-auto text-[10px] px-2 py-0.5 rounded border border-edge text-muted hover:text-accent hover:border-[#06b6d4]/30 transition-colors"
           >
             {zh ? '保存视图' : 'Save view'}
@@ -302,13 +296,13 @@ export default function IntelligenceBrowser({ locale, signals, loading, error, s
               </select>
               {drillQuery && (
                 <button onClick={() => setDrillQuery('')} className="text-[10px] px-2 py-0.5 rounded-full bg-accent-bg border border-accent text-accent">
-                  {zh ? `厂商命中词：${drillQuery}` : `vendor key: ${drillQuery}`} ×
+                  {zh ? `厂商：${VENDORS.find(v => v.id === drillQuery)?.nameZh ?? drillQuery} · 近${vendorDays}日` : `vendor key: ${drillQuery}`} ×
                 </button>
               )}
               {searchQuery && <span className="text-[10px] text-accent font-mono">{zh ? `搜索「${searchQuery}」` : `search "${searchQuery}"`}</span>}
             </div>
 
-            {tagCounts.length > 0 && (
+            {(tagCounts.length > 0 || activeTags.length > 0) && (
               <div className="flex flex-wrap items-center gap-1.5 px-3 py-2 border-b border-edge">
                 {activeTags.length > 0 && (
                   <button onClick={() => setActiveTags([])} className="text-[10px] text-muted hover:text-ink-2 mr-1">{zh ? '清除' : 'Clear'} ×</button>
@@ -354,8 +348,8 @@ export default function IntelligenceBrowser({ locale, signals, loading, error, s
             <div className="md:w-[46%] md:min-w-[330px] border-b md:border-b-0 md:border-r border-edge flex flex-col min-h-0">
               <div className="flex items-center gap-2 px-3 py-1.5 border-b border-edge text-[10px]">
                 <select value={vendorDays} onChange={e => setVendorDays(Number(e.target.value))} className="bg-elevated border border-edge-light rounded px-2 py-1 text-ink outline-none">
-                  <option value={7}>{zh ? '近 7 日' : 'Last 7d'}</option>
-                  <option value={30}>{zh ? '近 30 日' : 'Last 30d'}</option>
+                  <option value={7}>{zh ? '近7日（顶部范围内）' : '7d within current scope'}</option>
+                  <option value={30}>{zh ? '近30日（顶部范围内）' : '30d within current scope'}</option>
                 </select>
                 <button onClick={() => setVendorSort(s => ({ key: 'count', dir: s.key === 'count' && s.dir === 'desc' ? 'asc' : 'desc' }))} className={`px-1.5 py-0.5 rounded ${vendorSort.key === 'count' ? 'text-accent' : 'text-muted hover:text-ink-2'}`}>
                   {zh ? '提及' : 'Mentions'}{sortIndicator(vendorSort.key === 'count', vendorSort.dir)}
@@ -372,7 +366,7 @@ export default function IntelligenceBrowser({ locale, signals, loading, error, s
                   <p className="px-3 py-6 text-[11px] text-muted">{zh ? `近 ${vendorDays} 日无厂商提及` : `No vendor mentions in ${vendorDays}d`}</p>
                 ) : vendorRows.map((v, i) => {
                   const active = v.id === selectedVendorId
-                  const max = vendorRows[0]?.count || 1
+                  const max = Math.max(1, ...vendorRows.map(v => v.count))
                   const starred = isStarred('vendor', v.id)
                   const compared = compareIds.includes(v.id)
                   return (
@@ -475,10 +469,10 @@ export default function IntelligenceBrowser({ locale, signals, loading, error, s
                       <span>{zh ? '命中词' : 'key'} <span className="text-ink-2">{selectedVendor.bestKey}</span></span>
                     </div>
                     <button
-                      onClick={() => { setDrillQuery(selectedVendor.bestKey); setDimension('signals') }}
+                      onClick={() => { setDrillQuery(selectedVendor.id); setCategory('all'); setLanguageFilter('all'); setActiveTags([]); setDimension('signals') }}
                       className="mt-2 text-[10px] px-2 py-1 rounded border border-edge text-muted hover:text-accent hover:border-[#06b6d4]/30 transition-colors"
                     >
-                      {zh ? `在信号维度中只看这些（${selectedVendor.bestKey}）→` : `Show these signals (${selectedVendor.bestKey}) →`}
+                      {zh ? '查看该厂商全部匹配信号 →' : `Show these signals (${selectedVendor.bestKey}) →`}
                     </button>
                   </div>
                   <div>
@@ -499,6 +493,11 @@ export default function IntelligenceBrowser({ locale, signals, loading, error, s
         )}
 
         {/* ——— 模型维度：表 + 档案 ——— */}
+        {dimension === 'models' && <div className="px-3 py-2 flex items-center gap-2 text-[10px] text-muted border-b border-edge">
+          <label className="flex items-center gap-1"><input type="checkbox" checked={includeReferences} onChange={e => setIncludeReferences(e.target.checked)} />{zh ? '包含历史参考' : 'Include references'}</label>
+          <span>{zh ? '当前收录模型仓库；时间窗筛选信号。维护者不等同于官方厂商。' : 'Collected repositories; time window filters signals. Owners are not verified vendors.'}</span>
+          {(reportsError || reports?.state === 'static') && <span className="text-warning">{zh ? '动态模型资料暂不可用' : 'Live model data unavailable'}</span>}
+        </div>}
         {dimension === 'models' && (
           <div className="flex flex-col md:flex-row flex-1 min-h-0">
             <div className="md:w-[46%] md:min-w-[330px] border-b md:border-b-0 md:border-r border-edge flex flex-col min-h-0">
@@ -510,19 +509,19 @@ export default function IntelligenceBrowser({ locale, signals, loading, error, s
                   {zh ? '名称' : 'Name'}{sortIndicator(modelSort.key === 'name', modelSort.dir)}
                 </button>
                 <button onClick={() => setModelSort(s => ({ key: 'vendor', dir: s.key === 'vendor' && s.dir === 'asc' ? 'desc' : 'asc' }))} className={`px-1.5 py-0.5 rounded ${modelSort.key === 'vendor' ? 'text-accent' : 'text-muted hover:text-ink-2'}`}>
-                  {zh ? '厂商' : 'Vendor'}{sortIndicator(modelSort.key === 'vendor', modelSort.dir)}
+                  {zh ? '维护者' : 'Owner'}{sortIndicator(modelSort.key === 'vendor', modelSort.dir)}
                 </button>
               </div>
               <div className="flex-1 min-h-0 overflow-y-auto">
-                {modelRows.length === 0 ? (
-                  <p className="px-3 py-6 text-[11px] text-muted">{zh ? '模型数据加载中或不可用' : 'Model data loading or unavailable'}</p>
+                {reportsLoading && !reports ? <p className="px-3 py-6 text-[11px] text-muted">{zh ? '加载模型资料…' : 'Loading models…'}</p> : modelRows.length === 0 ? (
+                  <p className="px-3 py-6 text-[11px] text-muted">{zh ? '当前条件下没有模型' : 'Model data loading or unavailable'}</p>
                 ) : modelRows.map(m => {
                   const active = m.id === selectedModelId
                   const starred = isStarred('model', m.id)
                   return (
                     <div key={m.id} className={`flex items-center border-b border-edge-60 transition-colors ${active ? 'bg-accent-bg' : 'hover:bg-overlay'}`}>
                       <button onClick={() => setSelectedModelId(m.id)} className="flex-1 flex items-center gap-2 px-3 py-2 text-left min-w-0">
-                        <span className={`text-[11px] flex-1 truncate ${active ? 'text-ink' : 'text-ink-2'}`}>{m.name}</span>
+                        <span className={`text-[11px] flex-1 truncate ${active ? 'text-ink' : 'text-ink-2'}`}>{m.name}{m.reference && <span className="ml-1 text-warning text-[9px]">{zh ? '参考' : 'REF'}</span>}</span>
                         <span className="text-[10px] text-muted shrink-0">{m.vendor}</span>
                         <span className="text-[10px] font-mono text-dim shrink-0 tabular-nums">{m.date}</span>
                       </button>
@@ -581,6 +580,7 @@ export default function IntelligenceBrowser({ locale, signals, loading, error, s
                     </div>
                   )}
 
+                  {arenaError && <p className="text-[10px] text-warning">{zh ? '竞技场数据暂不可用' : 'Arena unavailable'}</p>}
                   {modelBoards.length > 0 && (
                     <div>
                       <p className="text-[10px] text-muted uppercase tracking-wider mb-1">{zh ? '竞技场分数' : 'Arena scores'}</p>
@@ -599,7 +599,7 @@ export default function IntelligenceBrowser({ locale, signals, loading, error, s
                   <div>
                     <p className="text-[10px] text-muted uppercase tracking-wider mb-1">{zh ? '相关信号' : 'Signals'}</p>
                     {modelSignals.length === 0 ? (
-                      <p className="text-[10px] text-dim">{zh ? '近 7 日无匹配信号' : 'No matching signals'}</p>
+                      <p className="text-[10px] text-dim">{zh ? '当前范围无匹配信号' : 'No matching signals'}</p>
                     ) : (
                       <div className="space-y-1">
                         {modelSignals.map(s => (

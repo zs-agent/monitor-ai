@@ -48,8 +48,9 @@ export interface VendorStats {
 
 /** 统计近 N 日内各厂商的提及情况（按提及数排序）。 */
 export function computeVendorRows(signals: Signal[], days = 7): VendorStats {
-  const cutoff = Date.now() - days * 86400000
-  const recent = signals.filter(s => new Date(s.publishedAt).getTime() >= cutoff)
+  const now = Date.now()
+  const cutoff = now - days * 86400000
+  const recent = signals.filter(s => { const t = Date.parse(s.publishedAt); return t >= cutoff && t <= now })
 
   const rows: VendorRow[] = VENDORS.map(v => {
     const hits: Signal[] = []

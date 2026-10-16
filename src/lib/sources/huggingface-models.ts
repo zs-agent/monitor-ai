@@ -41,7 +41,7 @@ export const huggingfaceModelsProvider: SignalProvider = {
             '; downloads: ' + downloads + '; ' + tags.join(', ') + (row.gated ? '; 访问限制 / gated' : ''),
           source: 'Hugging Face Models', sourceUrl: 'https://huggingface.co/' + row.id.split('/').map(encodeURIComponent).join('/'),
           publishedAt, category: 'models', country: 'UN', credibility: 4,
-          tags: ['model', kind, ...tags], importance: downloads >= 100000 ? 5 : downloads >= 1000 ? 4 : 2,
+          tags: Array.from(new Set(['model', kind, ...tags])), importance: downloads >= 100000 ? 5 : downloads >= 1000 ? 4 : 2,
           sourcesCount: 1, language: locale, providerId: 'huggingface-models',
         })
       }

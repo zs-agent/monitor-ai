@@ -98,7 +98,7 @@ export default function WorkspaceHeader({ locale, signals, freshness, sourceStat
     return local
   }, [signals, locale, coverage, coverageError, dataState])
 
-  const freshCount = freshness?.activeSources ?? 0
+  const freshCount = sourceStates.filter(s => s.itemCount > 0).length
 
   return (
     <div className="px-5 pt-5 pb-4 border-b border-edge">
@@ -127,20 +127,21 @@ export default function WorkspaceHeader({ locale, signals, freshness, sourceStat
           </div>
           {/* 数据源状态（4 源：状态点 + 缩写 + 条目数） */}
           <div className="flex flex-wrap items-center gap-2.5 max-w-full text-[10px] bg-card border border-edge rounded-lg px-3 py-1.5"
-            title={locale === 'zh' ? '数据源状态' : 'Source health'}>
+            title={locale === 'zh' ? '6个采集接口；数字为最近取得的资料条数，不是全网总量。RSS需要配置RSSHub服务。' : 'Collection endpoints and last item counts. RSS requires RSSHub.'}>
             {sourceStates.length === 0 && <span className="text-dim">—</span>}
             {sourceStates.map(s => {
-              const ok = s.status === 'fresh' || s.status === 'stale' || s.status === 'very_stale'
+              const ok = s.status === 'fresh'
+              const unconfigured = !!s.lastError && /RSSHUB_BASE_URL/.test(s.lastError)
               return (
-                <span key={s.id} className="flex items-center gap-1" title={s.status === 'no_data' ? s.name + ' · 尚未探测' : `${s.name} · ${s.itemCount} items`}>
-                  <span className={`w-1.5 h-1.5 rounded-full ${ok ? 'bg-emerald-400' : s.status === 'error' ? 'bg-red-400' : 'bg-dim'}`} />
+                <span key={s.id} className="flex items-center gap-1" title={[s.name, s.itemCount + (locale === 'zh' ? '条资料' : ' items'), unconfigured ? (locale === 'zh' ? '未配置RSSHub服务' : 'RSSHub not configured') : s.lastError || s.status, s.lastUpdate ? new Date(s.lastUpdate).toLocaleString() : ''].filter(Boolean).join(' · ')}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${ok ? 'bg-emerald-400' : unconfigured || s.status === 'no_data' || s.status === 'disabled' ? 'bg-dim' : s.status === 'error' ? 'bg-red-400' : 'bg-amber-400'}`} />
                   <span className="text-ink-2 font-mono">{sourceMetaMap[s.id]?.short || s.id}</span>
-                  <span className="text-dim font-mono">{s.itemCount}</span>
+                  <span className="text-dim font-mono">{unconfigured ? (locale === 'zh' ? '未配置' : 'setup') : s.itemCount}</span>
                 </span>
               )
             })}
             <span className="w-px h-3 bg-edge" />
-            <span className="text-muted">{freshCount}/{freshness?.totalSources ?? 0} {locale === 'zh' ? '在线' : 'live'}</span>
+            <span className="text-muted">{freshCount}/{freshness?.totalSources ?? 0} {locale === 'zh' ? '来源有数据' : 'with data'}</span>
           </div>
           {/* 刷新 */}
           <button

@@ -30,7 +30,7 @@ describe('text-match', () => {
   })
 
   it('实体名归一化后可跨写法比对', () => {
-    expect(normEntityName('DeepSeek-V3.2 系列')).toBe('deepseekv32')
+    expect(normEntityName('DeepSeek-V3.2 系列')).toBe('deepseekv3.2')
     expect(sameEntity('DeepSeek-V3.2 系列', 'DeepSeek V3.2')).toBe(true)
     expect(sameEntity('Qwen3 系列', 'qwen3')).toBe(true)
     expect(sameEntity('GPT', 'GPT-6')).toBe(false)   // 太短，避免过度匹配

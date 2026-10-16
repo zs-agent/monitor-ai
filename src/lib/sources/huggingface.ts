@@ -13,13 +13,14 @@ export const huggingfaceProvider: SignalProvider = {
     const res = await fetchWithTimeout('https://huggingface.co/api/daily_papers', {}, TIMEOUT)
     if (!res.ok) throw new Error(`HF daily_papers HTTP ${res.status}`)
     const data: any[] = await res.json()
+    if (!Array.isArray(data)) throw new Error('HF daily papers: invalid response')
 
     const papers = data.filter(p => p.id || p.paper?.id).slice(0, 100).map((p: any) => ({
       id: `hf-${p.id || p.paper?.id}`,
       title: p.title || p.paper?.title || '',
       url: `https://huggingface.co/papers/${p.id || p.paper?.id || ''}`,
       upvotes: p.upvotes || p.paper?.upvotes || 0,
-      createdAt: p.createdAt || p.paper?.createdAt || new Date().toISOString(),
+      createdAt: p.paper?.publishedAt || p.publishedAt || p.createdAt || p.paper?.createdAt || '',
     }))
 
     const signals: Signal[] = []

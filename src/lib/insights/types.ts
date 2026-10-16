@@ -13,6 +13,8 @@ export interface CategoryInsight {
   coveredCount: number
   /** text 为空时的信号标题概览（无 LLM key/生成失败时前端展示，避免面板空白） */
   signalTitles?: string[]
+  signalIds?: string[]
+  summarizedCount?: number
 }
 
 export interface InsightsSnapshot {
@@ -21,4 +23,8 @@ export interface InsightsSnapshot {
   generatedAt: number
   /** 有 LLM 结果（无 key/失败时为 false，前端显示原文摘要） */
   hasLlm: boolean
+  inputFingerprint?: string
+  scope?: string
+  query?: string
+  sourceState?: 'sample' | 'stale' | 'current'
 }

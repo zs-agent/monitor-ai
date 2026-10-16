@@ -126,7 +126,7 @@ export async function refreshLocale(locale: 'zh' | 'en', providerIds?: string[],
     for (const [id, health] of Object.entries(latest?.sourceHealth || {})) {
       if (!targetIds.has(id)) sourceHealth[id] = health
     }
-    const snapshot: LocaleSnapshot = { signals: merged, fetchedAt: Date.now(), sourceHealth, ingestionVersion: 2 }
+    const snapshot: LocaleSnapshot = { signals: merged, fetchedAt: Date.now(), sourceHealth, ingestionVersion: 5 }
     snapshots.set(locale, snapshot)
     saveToDisk({ ...loadFromDisk(), [locale]: snapshot })
     return snapshot
@@ -145,7 +145,7 @@ export async function aggregateSignals(locale: 'zh' | 'en', category: string, fo
   const now = Date.now()
   let snapshot = snapshots.get(locale) ?? loadFromDisk()[locale]
 
-  if (snapshot?.ingestionVersion === 2 && now - snapshot.fetchedAt < (forceRefresh ? 15000 : CACHE_TTL)) {
+  if (snapshot?.ingestionVersion === 5 && now - snapshot.fetchedAt < (forceRefresh ? 15000 : CACHE_TTL)) {
     return {
       signals: applyFilters(snapshot.signals, locale, category),
       fetchedAt: snapshot.fetchedAt,
@@ -192,5 +192,5 @@ export async function aggregateSignals(locale: 'zh' | 'en', category: string, fo
 export function applyFilters(signals: Signal[], locale: string, category: string): Signal[] {
   let r = signals.filter(s => s.language === locale)
   if (category !== 'all') r = r.filter(s => s.category === category)
-  return r.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
+  return r.sort((a, b) => (Date.parse(b.publishedAt) || 0) - (Date.parse(a.publishedAt) || 0))
 }

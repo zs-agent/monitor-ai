@@ -59,7 +59,7 @@ export default function SignalDetailDrawer({ signal, locale, onClose, onRelatedC
               {locale === 'zh' ? '情报详情' : 'INTELLIGENCE DETAIL'}
             </span>
           </div>
-          <button onClick={onClose} className="text-muted hover:text-ink text-lg leading-none px-1">&times;</button>
+          <button aria-label={locale === 'zh' ? '关闭情报详情' : 'Close intelligence detail'} onClick={onClose} className="text-muted hover:text-ink text-lg leading-none px-1">&times;</button>
         </div>
 
         <div className="px-5 py-4 space-y-5">
@@ -142,7 +142,7 @@ export default function SignalDetailDrawer({ signal, locale, onClose, onRelatedC
                 {locale === 'zh' ? '关联实体' : 'RELATED ENTITIES'}
               </h3>
               <div className="flex flex-wrap gap-1.5">
-                {signal.tags.map(tag => (
+                {Array.from(new Set(signal.tags)).map(tag => (
                   <button key={tag} onClick={() => onRelatedClick?.(tag)}
                     className="text-[10px] px-2 py-0.5 rounded-full border border-edge text-ink-2 hover:border-accent hover:text-accent transition-colors">
                     #{tag}

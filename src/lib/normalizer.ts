@@ -1,4 +1,5 @@
 import type { Signal } from '@/types/signal'
+import { matchesKeyword } from '@/lib/text-match'
 
 export interface RawHNItem {
   id: number
@@ -40,19 +41,23 @@ export interface RawS2Paper {
 }
 
 const CATEGORY_KEYWORDS: Record<string, string[]> = {
-  models: ['model', 'gpt', 'claude', 'llama', 'release', 'open source', 'gemini', 'opus', 'sonnet', 'mistral', 'llm', '参数', '发布', '开源'],
-  products: ['product', 'app', 'launch', 'tool', 'chatgpt', 'copilot', 'voice', 'desktop', '更新', '上线', '应用'],
-  industry: ['policy', 'regulation', 'ban', 'law', 'government', 'lawsuit', 'patent', 'market', 'funding', '政策', '监管', '融资', '投资'],
+  models: ['model', 'models', 'llms', 'open-source', 'gpt', 'claude', 'llama', 'release', 'open source', 'gemini', 'opus', 'sonnet', 'mistral', 'llm', '参数', '发布', '开源'],
+  products: ['product', 'app', 'launch', 'tool', 'chatgpt', 'copilot', 'voice', 'desktop', '更新', '上线', '应用', 'tools', 'apps', 'assistant', 'platform', 'sandbox', 'workflow', 'harness'],
+  industry: ['policy', 'regulation', 'ban', 'law', 'government', 'lawsuit', 'patent', 'market', 'funding', '政策', '监管', '融资', '投资', 'financing', 'investors', 'investment', 'investments', 'bonds', 'debt', 'bankruptcy', 'copyright', 'ruling', 'lawsuits', 'regulations', 'regulatory', 'antitrust', 'acquisition', 'merger', 'partnership', 'layoffs', 'job losses', 'jobs are declining', 'ceo', '裁员', '收购', '版权', '破产', '合作', '融资'],
   papers: ['paper', 'research', 'benchmark', 'arxiv', 'study', '论文', '研究', '前沿'],
   tips: ['tutorial', 'guide', 'how to', 'build', 'engineering', 'prompt', '教程', '实战', '工程'],
 }
 
 function classifyCategory(title: string, source: string): Signal['category'] {
-  const lower = `${title} ${source}`.toLowerCase()
-  for (const [cat, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
-    if (keywords.some(kw => lower.includes(kw))) return cat as Signal['category']
+  if (source === 'github') {
+    return ['tutorial', 'guide', 'cookbook', 'course', 'awesome', 'prompts', '教程', '实战'].some(kw => matchesKeyword(title, kw)) ? 'tips' : 'products'
   }
-  return 'models'
+  if (/^show hn:/i.test(title) && !CATEGORY_KEYWORDS.industry.some(kw => matchesKeyword(title, kw))) return 'products'
+  // Specific intent outranks a generic mention of a model or release.
+  for (const cat of ['industry', 'tips', 'products', 'papers', 'models'] as const) {
+    if (CATEGORY_KEYWORDS[cat].some(kw => matchesKeyword(title, kw))) return cat
+  }
+  return 'industry'
 }
 
 function computeImportance(score: number, hasMultipleSources: boolean): number {
@@ -105,7 +110,7 @@ export function normalizeHNSignal(item: RawHNItem, locale: 'zh' | 'en'): Signal 
     credibility: sourceCredibility('hackernews'),
     tags: [extractDomain(item.url || '')],
     importance: computeImportance(item.score, false),
-    sourcesCount: Math.min(Math.ceil(item.score / 100) + 1, 10),
+    sourcesCount: 1,
     language: locale,
     providerId: 'hackernews',
   }
@@ -124,7 +129,7 @@ export function normalizeHFPaper(paper: RawHFPaper, locale: 'zh' | 'en'): Signal
     credibility: sourceCredibility('huggingface'),
     tags: ['hf-paper'],
     importance: computeImportance(paper.upvotes, false),
-    sourcesCount: Math.min(Math.ceil(paper.upvotes / 50) + 1, 8),
+    sourcesCount: 1,
     language: locale,
     providerId: 'huggingface',
   }
@@ -138,7 +143,7 @@ export function normalizeGitHubRepo(repo: RawGitHubRepo, locale: 'zh' | 'en', st
     summary: repo.description || `${repo.stars} stars on GitHub`,
     source: 'GitHub',
     sourceUrl: repo.url,
-    publishedAt: repo.pushedAt || new Date().toISOString(),
+    publishedAt: repo.pushedAt || '',
     category,
     country: 'UN',
     credibility: sourceCredibility('github'),
@@ -158,7 +163,7 @@ export function normalizeS2Paper(paper: RawS2Paper, locale: 'zh' | 'en'): Signal
     summary: paper.summary || `${paper.citations} citations · Semantic Scholar`,
     source: 'Semantic Scholar',
     sourceUrl: paper.url,
-    publishedAt: paper.date ? new Date(paper.date).toISOString() : new Date().toISOString(),
+    publishedAt: paper.date && Number.isFinite(Date.parse(paper.date)) ? new Date(paper.date).toISOString() : '',
     category: 'papers',
     country: inferCountry(paper.title),
     credibility: sourceCredibility('semanticscholar'),

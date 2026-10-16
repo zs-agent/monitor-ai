@@ -1,14 +1,17 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { type Locale } from '@/lib/i18n'
 import type { Signal } from '@/types/signal'
 import PanelBase from './PanelBase'
 import type { BrowseCounts } from '@/lib/browse-view'
+import type { SignalWindow } from '@/lib/browse-data'
 import type { InsightsSnapshot } from '@/lib/insights/types'
 
 interface Props {
   locale: Locale
+  scope?: SignalWindow
+  searchQuery?: string
   /** 供精选标题点击时匹配完整信号对象（复用页面已有的详情抽屉） */
   signals?: Signal[]
   onSignalClick?: (s: Signal) => void
@@ -41,22 +44,26 @@ const CATEGORY_COLOR: Record<string, string> = {
   tips: '#f472b6',
 }
 
-export default function InsightsPanel({ locale, signals, onSignalClick, bare = false, refreshNonce = 0, onRefreshingChange, onDrillDown, evidence = null, onOpenRetrieval }: Props) {
-  const [snapshot, setSnapshot] = useState<InsightsSnapshot | null>(null)
+export default function InsightsPanel({ locale, scope = 'all', searchQuery = '', signals, onSignalClick, bare = false, refreshNonce = 0, onRefreshingChange, onDrillDown, evidence = null, onOpenRetrieval }: Props) {
+  const [storedSnapshot, setSnapshot] = useState<InsightsSnapshot | null>(null)
+  const snapshot = storedSnapshot?.scope === scope && (storedSnapshot.query ?? '').toLowerCase() === searchQuery.trim().toLowerCase() ? storedSnapshot : null
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const feedVersion = useMemo(() => JSON.stringify(signals?.map(s => [s.id, s.title, s.summary, s.category, s.publishedAt, s.importance])), [signals])
   const abortRef = useRef<AbortController | null>(null)
 
   const load = useCallback((force = false) => {
     abortRef.current?.abort()
     const ctrl = new AbortController()
     abortRef.current = ctrl
-    if (force) setRefreshing(true)
-    else setLoading(true)
+    setRefreshing(force)
+    setLoading(true)
     setError(null)
 
-    fetch(`/api/insights?locale=${locale}`, {
+    const timeout = setTimeout(() => ctrl.abort(new Error(locale === 'zh' ? '加载超时，请重试' : 'Request timed out')), 45000)
+    const params = new URLSearchParams({ locale, window: scope, q: searchQuery })
+    fetch('/api/insights?' + params, {
       method: force ? 'POST' : 'GET',
       signal: ctrl.signal,
     })
@@ -68,14 +75,20 @@ export default function InsightsPanel({ locale, signals, onSignalClick, bare = f
         setRefreshing(false)
       })
       .catch(e => {
-        if (e.name === 'AbortError') return
-        setError(e.message)
+        if (abortRef.current !== ctrl) return
+        if (ctrl.signal.aborted && !ctrl.signal.reason?.message?.includes('超时') && !ctrl.signal.reason?.message?.includes('timed out')) return
+        setError(e.message || '加载失败')
         setLoading(false)
         setRefreshing(false)
       })
-  }, [locale])
+      .finally(() => clearTimeout(timeout))
+  }, [locale, scope, searchQuery])
 
-  useEffect(() => { load(); return () => abortRef.current?.abort() }, [load])
+  useEffect(() => {
+    setSnapshot(null)
+    const timer = setTimeout(() => load(), 350)
+    return () => { clearTimeout(timer); abortRef.current?.abort(); abortRef.current = null }
+  }, [load, feedVersion])
 
   // 洞察自动刷新：页面可见期间每 5 分钟后台重拉（已有快照时不清 loading，不闪烁）
   useEffect(() => {
@@ -104,7 +117,7 @@ export default function InsightsPanel({ locale, signals, onSignalClick, bare = f
       title={locale === 'zh' ? '今日 AI 洞察' : 'AI Insights'}
       severity="none"
       count={snapshot?.insights.filter(i => i.text).length}
-      loading={loading && !snapshot}
+      loading={(loading || !snapshot) && !snapshot && !error}
       error={error}
       onRetry={() => load(false)}
       className="h-full"
@@ -143,15 +156,15 @@ export default function InsightsPanel({ locale, signals, onSignalClick, bare = f
                       {locale === 'zh' ? label[1] : label[0]}
                     </span>
                     <span className="text-[9px] text-muted">
-                      {locale === 'zh' ? `基于 ${insight.coveredCount} 条信号` : `based on ${insight.coveredCount} signals`}
+                      {locale === 'zh' ? `${insight.coveredCount}条资料${hasText ? ' · 摘要参考' + insight.summarizedCount + '条' : ''}` : `${insight.coveredCount} signals${hasText ? ' · summarized ' + insight.summarizedCount : ''}`}
                     </span>
                     {onDrillDown && insight.coveredCount > 0 && (
                       <button
                         onClick={() => onDrillDown(insight.category)}
-                        title={locale === 'zh' ? '在情报检索里按该分类看支撑信号' : 'See the supporting signals in retrieval'}
+                        title={locale === 'zh' ? '在情报检索中查看该分类的原始资料' : 'View original records for this category'}
                         className="ml-auto text-[9px] text-accent hover:opacity-80 transition-opacity whitespace-nowrap"
                       >
-                        {locale === 'zh' ? '支撑信号 ▸' : 'Signals ▸'}
+                        {locale === 'zh' ? '查看资料 ▸' : 'Sources ▸'}
                       </button>
                     )}
                   </div>
@@ -161,12 +174,12 @@ export default function InsightsPanel({ locale, signals, onSignalClick, bare = f
                     <div>
                       <div className="flex items-center gap-1.5 mb-1">
                         <span className="text-[8px] px-1 py-px rounded bg-amber-400/10 text-amber-400 border border-amber-400/20">
-                          {locale === 'zh' ? '高价值精选' : 'High-value'}
+                          {locale === 'zh' ? '最新线索' : 'Current signals'}
                         </span>
                       </div>
                       <ul className="flex flex-col gap-0.5">
                         {insight.signalTitles.map((title, i) => {
-                          const matched = signals?.find(s => s.title === title)
+                          const matched = insight.signalIds?.[i] ? signals?.find(s => s.id === insight.signalIds?.[i]) : signals?.find(s => s.title === title)
                           return (
                             <li key={i}>
                               <button
@@ -188,7 +201,7 @@ export default function InsightsPanel({ locale, signals, onSignalClick, bare = f
                     </div>
                   ) : insight.coveredCount > 0 ? (
                     <p className="text-[11px] text-muted italic">
-                      {locale === 'zh' ? '均为常规动态，全量见右侧时间轴' : 'Routine signals only — see timeline'}
+                      {locale === 'zh' ? '暂无摘要，可在情报检索查看原始资料' : 'Open retrieval to view source records'}
                     </p>
                   ) : (
                     <p className="text-[11px] text-muted italic">
@@ -206,10 +219,10 @@ export default function InsightsPanel({ locale, signals, onSignalClick, bare = f
                   className="w-full group px-3 py-2 flex items-center gap-2 text-left hover:bg-hover transition-colors"
                 >
                   <span className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted">
-                    {locale === 'zh' ? '证据链' : 'Evidence'}
+                    {locale === 'zh' ? '资料入口' : 'Sources'}
                   </span>
                   <span className="text-[10px] font-mono text-ink-2 tabular-nums">
-                    {evidence.signals}{locale === 'zh' ? ' 信号 · ' : ' signals · '}{evidence.vendors}{locale === 'zh' ? ' 厂商 · ' : ' vendors · '}{evidence.models}{locale === 'zh' ? ' 模型' : ' models'}
+                    {locale === 'zh' ? '查找信号、厂商和模型资料' : 'Browse signals, vendors and models'}
                   </span>
                   <span className="ml-auto text-[9px] text-accent opacity-80 group-hover:opacity-100 whitespace-nowrap">
                     {locale === 'zh' ? '打开情报检索 ▸' : 'Open retrieval ▸'}
@@ -217,9 +230,9 @@ export default function InsightsPanel({ locale, signals, onSignalClick, bare = f
                 </button>
               )}
               <div className="px-3 py-1.5 text-[9px] text-dim">
-                {snapshot.hasLlm
-                  ? (locale === 'zh' ? `更新于 ${formatTime(snapshot.generatedAt)} · 每 30 分钟自动刷新` : `Updated ${formatTime(snapshot.generatedAt)} · refreshes every 30 min`)
-                  : (locale === 'zh' ? '未配置 OPENAI_API_KEY，显示信号概览（配置后自动升级为 AI 洞察）' : 'OPENAI_API_KEY not set — showing signal overview')}
+                {locale === 'zh'
+                  ? `更新于 ${formatTime(snapshot.generatedAt)} · ${scope === 'all' ? '全部已收录' : '近' + scope} · ${snapshot.hasLlm ? '标题摘要，未逐项核查；无摘要时展示原始线索' : '信号概览；自动摘要暂不可用'}${snapshot.sourceState === 'sample' ? ' · 样例资料' : snapshot.sourceState === 'stale' ? ' · 沿用上次采集' : ''}`
+                  : `Checked ${formatTime(snapshot.generatedAt)} · ${scope} · ${snapshot.hasLlm ? 'AI summaries / source overview' : 'Source overview; AI summary unavailable'}`}
               </div>
             </div>
           </div>

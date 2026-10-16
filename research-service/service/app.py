@@ -22,6 +22,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 
 from . import signals as sig
+from .insights import router as insights_router
 from . import runner as persistence
 from .evolution import prepare_research
 from .research_state import build_state, infer_type, action_options, allocate
@@ -60,6 +61,7 @@ async def lifespan(application):
         await asyncio.gather(*jobs, return_exceptions=True)
 
 app = FastAPI(title="monitor-ai research service", version="0.3.0", lifespan=lifespan)
+app.include_router(insights_router)
 
 
 class _ForeignProbeFilter(logging.Filter):

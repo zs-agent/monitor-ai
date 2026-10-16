@@ -4,18 +4,24 @@
 // 用于短名单与保存视图这类"本机偏好"——不引入后端表。
 import { useCallback, useEffect, useState } from 'react'
 
-export function useLocalStore<T>(key: string, initial: T) {
+export function useLocalStore<T>(key: string, initial: T, validate?: (value: unknown) => value is T) {
   const [value, setValue] = useState<T>(initial)
   const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(key)
-      if (raw) setValue(JSON.parse(raw) as T)
+      if (raw) {
+        const parsed: unknown = JSON.parse(raw)
+        const valid = validate ? validate(parsed) : Array.isArray(initial) ? Array.isArray(parsed) && parsed.every(x => typeof x === 'string') : typeof parsed === typeof initial
+        if (valid) setValue(parsed as T)
+      }
     } catch {
       // 解析失败/隐私模式：保持默认值即可
     }
     setLoaded(true)
+  // initial and validator describe the storage schema; a key change reloads it.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key])
 
   const update = useCallback((next: T | ((prev: T) => T)) => {

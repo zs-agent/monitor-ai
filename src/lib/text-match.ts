@@ -6,7 +6,7 @@
  *   · 拉丁关键词要求词边界；中日韩关键词按子串（无词边界语义）
  *   · 短于 minLength 的 token 直接丢弃（`v4`/`9b`/`pro` 太泛）
  *   · 模型名切词后过一遍停用词表（large/language/intelligence… 这些不能当关联依据）
- *   · 实体名比对先归一化（去大小写、去标点、去尾缀「系列/技术报告」），再做包含判断
+ *   · 实体名比对先归一化（去大小写、去标点、去尾缀「系列/技术报告」），再做完整名称比对（保留版本与变体差异）
  */
 
 /** 静态字符串查表：词边界规则下不需要动态集合 */
@@ -30,12 +30,12 @@ export function keywordRegex(key: string): RegExp {
 
 /** 文本是否命中关键词（大小写不敏感；短词与停用词在此不做过滤，由调用方决定） */
 export function matchesKeyword(text: string, key: string): boolean {
-  return keywordRegex(key).test(text)
+  return !!key.trim() && keywordRegex(key).test(text)
 }
 
 /** 命中哪些关键词（供下钻使用：拿真正命中的词去过滤，而不是展示名） */
 export function matchedKeywords(text: string, keys: string[]): string[] {
-  return keys.filter(key => keywordRegex(key).test(text))
+  return keys.filter(key => matchesKeyword(text, key))
 }
 
 /** 从实体名切出可用于关联的 token：去标点、长度 ≥ minLength、过滤停用词 */
@@ -50,16 +50,23 @@ export function entityTokens(name: string, minLength = 4): string[] {
 export function normEntityName(name: string): string {
   return name
     .toLowerCase()
-    .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '')
+    .replace(/[^a-z0-9.\u4e00-\u9fa5]+/g, '')
     .replace(/(系列|技术报告|开源模型|开源权重|technicalreport|series|report|model)$/g, '')
 }
 
-/** 两个名字是否指向同一实体（归一化后互相包含，且长度够长，避免 gpt 命中 gpt5 之类的过度匹配） */
-export function sameEntity(a: string, b: string, minLength = 5): boolean {
+/** 两个名字是否指向同一实体（归一化后完整一致；禁止跨版本或跨变体借用评分） */
+export function sameEntity(a: string, b: string): boolean {
   const na = normEntityName(a)
   const nb = normEntityName(b)
   if (!na || !nb) return false
-  if (na === nb) return true
-  const [short, long] = na.length <= nb.length ? [na, nb] : [nb, na]
-  return short.length >= minLength && long.includes(short)
+  return na === nb
+}
+
+/** Full normalized model mention, preserving version and size; never match family token alone. */
+export function mentionsEntity(text: string, name: string): boolean {
+  const parts = name.toLowerCase().replace(/(系列|technical report|series)$/i, '').trim()
+    .match(/[a-z]+|[0-9]+(?:\.[0-9]+)*|[\u4e00-\u9fff]+/g)
+  if (!parts?.length) return false
+  const escaped = parts.map(p => p.replace(/[.*+?^$()|[\]\\]/g, '\\$&')).join('[\\s_/-]*')
+  return new RegExp('(?<![a-z0-9])' + escaped + '(?![a-z0-9]|\\.[0-9])', 'i').test(text)
 }

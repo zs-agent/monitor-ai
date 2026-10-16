@@ -1,7 +1,8 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import type { Signal } from '@/types/signal'
 import { applyFilters, mergeSignals } from '@/lib/aggregate'
-import { buildCategory } from '@/lib/insights/pipeline'
+import { buildCategory, insightFingerprint } from '@/lib/insights/pipeline'
+vi.mock('@/lib/insights/llm', () => ({ generateInsight: vi.fn().mockResolvedValue(null) }))
 import { normalizeRssItem } from '@/lib/sources/rss'
 
 function makeSignal(overrides: Partial<Signal> & { id: string }): Signal {
@@ -77,28 +78,29 @@ describe('insights.buildCategory（无 LLM key 时）', () => {
     expect(result.coveredCount).toBe(0)
     expect(result.stale).toBe(false)
   })
-  it('只移除资料时，无法重新生成也必须标为过期', async () => {
+  it('只移除资料且无法重新生成时，清空旧摘要', async () => {
     const result = await buildCategory('models', [makeSignal({ id: 'a' })], { category: 'models', text: 'older scope', basedOnSignalIds: ['a', 'b'], generatedAt: '2026-01-01', coveredCount: 2 })
     expect(result.stale).toBe(true)
-    expect(result.generatedAt).toBe('2026-01-01')
+    expect(result.text).toBe('')
   })
   it('无新增信号 → 复用旧文本，不触发 LLM', async () => {
     const prev = {
       category: 'models' as const,
       text: '旧洞察',
       basedOnSignalIds: ['a', 'b'],
-      generatedAt: '2026-01-01T00:00:00.000Z',
+      generatedAt: new Date().toISOString(),
       coveredCount: 2,
     }
     const signals = [
       makeSignal({ id: 'a', category: 'models' }),
       makeSignal({ id: 'b', category: 'models' }),
     ]
-    const r = await buildCategory('models', signals, prev)
-    expect(r).toBe(prev) // 复用同一对象
+    const r = await buildCategory('models', signals, { ...prev, inputFingerprint: insightFingerprint(signals) })
+    expect(r.text).toBe(prev.text)
+    expect(r.generatedAt).toBe(prev.generatedAt)
   })
 
-  it('有新增信号但无 key → 保留旧文本，更新覆盖集合', async () => {
+  it('有新增信号但无 key → 清空旧摘要，保留当前资料入口', async () => {
     const prev = {
       category: 'models' as const,
       text: '旧洞察',
@@ -111,7 +113,7 @@ describe('insights.buildCategory（无 LLM key 时）', () => {
       makeSignal({ id: 'b', category: 'models' }),
     ]
     const r = await buildCategory('models', signals, prev)
-    expect(r.text).toBe('旧洞察')
+    expect(r.text).toBe('')
     expect(r.basedOnSignalIds).toEqual(['a', 'b'])
     expect(r.coveredCount).toBe(2)
   })

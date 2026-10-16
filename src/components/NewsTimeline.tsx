@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { type Locale } from '@/lib/i18n'
 import type { Signal } from '@/types/signal'
 import PanelBase from './PanelBase'
+import { relativeSignalTime } from '@/lib/browse-data'
 
 interface Props { locale: Locale; signals?: Signal[]; onSignalClick?: (s: Signal) => void; dataState?: 'live' | 'cached' | 'stale' | 'static'; showTabs?: boolean }
 
@@ -24,9 +25,9 @@ const TABS: { id: string; label_en: string; label_zh: string; filter: (s: Signal
   { id: 'github', label_en: 'GitHub', label_zh: '开源', filter: s => s.source === 'GitHub' },
 ]
 
-function timeAgo(iso: string): string { const d = Date.now() - new Date(iso).getTime(); const m = Math.floor(d / 60000); return m < 60 ? `${m}m` : m < 1440 ? `${Math.floor(m / 60)}h` : `${Math.floor(m / 1440)}d` }
+
 function formatDate(iso: string): string {
-  const d = new Date(iso); return `${d.getFullYear()}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getDate().toString().padStart(2,'0')} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`
+  const d = new Date(iso); if (!Number.isFinite(d.getTime())) return '时间未知'; return `${d.getFullYear()}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getDate().toString().padStart(2,'0')} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`
 }
 
 /** 规则化"为什么值得关注"：基于重要性/多源/分类生成，避免纯标题滚动 */
@@ -46,33 +47,27 @@ function TimelineItem({ signal, catColor, catLabel, isActive, locale, onClick }:
   signal: Signal; catColor: string; catLabel: { en: string; zh: string }; isActive: boolean; locale: Locale; onClick: () => void
 }) {
   return (
-    <div className={`flex items-start gap-3 py-2 px-2 rounded-lg transition-all duration-500 cursor-pointer hover:bg-hover group ${isActive ? 'bg-[#06b6d4]/5' : ''}`} onClick={onClick}>
-      <div className="w-[116px] shrink-0 pt-0.5 text-right">
-        <span className={`text-[10px] font-mono transition-colors duration-300 block ${isActive ? 'text-accent' : 'text-muted'}`}>{formatDate(signal.publishedAt)}</span>
-        <span className="text-[9px] font-mono text-dim block">{timeAgo(signal.publishedAt)}</span>
-      </div>
-      <div className="relative shrink-0 pt-0.5" style={{ zIndex: 1 }}>
-        <div className={`w-2.5 h-2.5 rounded-full border-2 transition-all duration-500 ${isActive ? 'border-[#06b6d4] bg-[#06b6d4] shadow-[0_0_6px_rgba(6,182,212,0.5)]' : 'border-edge bg-base group-hover:border-[#06b6d4]/50'}`} style={{ borderColor: isActive ? undefined : catColor + '40' }} />
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-0.5">
-          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border transition-all duration-500 ${isActive ? 'bg-[#06b6d4]/15 text-accent border-[#06b6d4]/30' : 'bg-transparent text-muted border-transparent'}`} style={!isActive ? { color: catColor + 'cc', borderColor: catColor + '30' } : undefined}>{locale === 'zh' ? catLabel.zh : catLabel.en}</span>
-        </div>
-        <p className={`text-[12px] leading-snug transition-colors duration-500 line-clamp-2 ${isActive ? 'text-ink' : 'text-ink-2'}`}>{signal.title}</p>
-        <div className="flex items-center gap-2 mt-1">
-          <span className="text-[10px] text-muted">{signal.source}</span>
-          {signal.source === 'GitHub' && typeof signal.starsDelta7d === 'number' && signal.starsDelta7d !== null && (
-            <span className="text-[9px] font-mono text-success bg-success-10 px-1.5 py-0.5 rounded">
-              +{signal.starsDelta7d.toLocaleString()}/wk
-            </span>
-          )}
-          <span className="text-[9px] text-dim">· {signal.language === 'zh' ? '中文' : 'EN'}</span>
-          {signal.importance >= 4 && <span className="text-[10px] text-[#f59e0b]">🔥</span>}
-        </div>
-        {/* 为什么值得关注（规则化） */}
-        <div className="text-[9px] text-[#f59e0b]/80 mt-0.5 truncate">◈ {whyWatch(signal, locale)}</div>
-      </div>
-    </div>
+    <button type="button" data-timeline-item title={signal.title}
+      className={`flex w-full text-left items-start gap-3 py-3 rounded-lg transition-colors cursor-pointer hover:bg-hover group ${isActive ? 'bg-[#06b6d4]/5' : ''}`} onClick={onClick}>
+      <span className="relative shrink-0 pt-1.5" style={{ zIndex: 1 }}>
+        <span className={`block w-2.5 h-2.5 rounded-full border-2 ${isActive ? 'border-[#06b6d4] bg-[#06b6d4]' : 'border-edge bg-base'}`}
+          style={{ borderColor: isActive ? undefined : catColor + '80' }} />
+      </span>
+      <span className="flex-1 min-w-0">
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mb-1 text-[10px]">
+          <time dateTime={signal.publishedAt || undefined} className="font-mono text-muted">{formatDate(signal.publishedAt)}</time>
+          <span className="text-dim">{relativeSignalTime(signal.publishedAt, locale)}</span>
+          <span className="px-1.5 rounded-full border" style={{ color: catColor, borderColor: catColor + '40' }}>{locale === 'zh' ? catLabel.zh : catLabel.en}</span>
+        </span>
+        <span data-timeline-title className="block text-[13px] leading-relaxed text-ink-2 group-hover:text-accent line-clamp-3 break-words">{signal.title}</span>
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1 text-[10px] text-muted">
+          <span>{signal.source}</span>
+          {signal.source === 'GitHub' && typeof signal.starsDelta7d === 'number' &&
+            <span className="font-mono text-success">+{signal.starsDelta7d.toLocaleString()}/wk</span>}
+          <span className="text-dim">{whyWatch(signal, locale)}</span>
+        </span>
+      </span>
+    </button>
   )
 }
 
@@ -85,8 +80,10 @@ export default function NewsTimeline({ locale, signals: externalSignals, onSigna
   const [loading, setLoading] = useState(!hasExternal)
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [activeIdx, setActiveIdx] = useState(0)
-  const [paused, setPaused] = useState(false)
+  const [paused, setPaused] = useState(true)
+  const [hovered, setHovered] = useState(false)
   const [activeTab, setActiveTab] = useState(tabs[0]?.id || 'all')
+  const viewportRef = useRef<HTMLDivElement>(null)
   const stripRef = useRef<HTMLDivElement>(null)
   const rafRef = useRef<number>(0)
   const visibleRef = useRef(true)
@@ -117,15 +114,15 @@ export default function NewsTimeline({ locale, signals: externalSignals, onSigna
     const tabConfig = tabs.find(t => t.id === activeTab) || tabs[0]
     return [...signals]
       .filter(s => s.title?.length > 0 && tabConfig.filter(s))
-      .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
-      .slice(0, 7)
+      .sort((a, b) => (Date.parse(b.publishedAt) || 0) - (Date.parse(a.publishedAt) || 0))
+      .slice(0, 20)
   }, [signals, activeTab, tabs])
 
   const newCount = useMemo(() => {
     const h = Date.now() - 3600000; return sorted.filter(s => new Date(s.publishedAt).getTime() > h).length
   }, [sorted])
 
-  useEffect(() => { pausedRef.current = paused }, [paused])
+  useEffect(() => { pausedRef.current = paused || hovered }, [paused, hovered])
   useEffect(() => { activeIdxRef.current = activeIdx }, [activeIdx])
   useEffect(() => { sortedLenRef.current = sorted.length }, [sorted.length])
 
@@ -143,8 +140,8 @@ export default function NewsTimeline({ locale, signals: externalSignals, onSigna
     if (hasExternal && signals.length === 0)
       return { icon: '◇', title: locale === 'zh' ? '当前数据源暂无 AI 信号' : 'No AI Signals from Sources',
         desc: locale === 'zh'
-          ? '4 个数据源（HN/HF/GitHub/S2）均已连接，但过去 24 小时无符合筛选条件的 AI 相关信号。这不是异常——AI 新闻在非工作时间通常较少。'
-          : 'All 4 sources (HN/HF/GitHub/S2) are connected but no AI signals match filters in the last 24h. This is normal during low-activity hours.' }
+          ? '当前时间范围或搜索条件下没有匹配的资料，可调整筛选后重试。'
+          : 'No records match the current time range or search. Try adjusting filters.' }
     if (sorted.length === 0 && signals.length > 0)
       return { icon: '◇', title: locale === 'zh' ? '当前标签下无信号' : 'No Signals in This Tab',
         desc: locale === 'zh'
@@ -207,11 +204,21 @@ export default function NewsTimeline({ locale, signals: externalSignals, onSigna
     setActiveIdx(0)
     startAnimation()
   }, [sorted, startAnimation])
-  useEffect(() => { startAnimation() }, [paused, startAnimation])
+  useEffect(() => {
+    if (paused && stripRef.current) {
+      offsetRef.current = 0
+      stripRef.current.style.transform = 'translateY(0px)'
+    }
+    startAnimation()
+  }, [paused, startAnimation])
+  useEffect(() => { startAnimation() }, [hovered, startAnimation])
+  useEffect(() => { if (viewportRef.current) viewportRef.current.scrollTop = 0 }, [paused])
   useEffect(() => {
     const rafId = requestAnimationFrame(measure)
     return () => cancelAnimationFrame(rafId)
-  }, [sorted, measure])
+  }, [sorted, paused, measure])
+
+  useEffect(() => () => cancelAnimationFrame(rafRef.current), [])
 
   // 不可见时暂停动画，避免持续占用 CPU/内存
   useEffect(() => {
@@ -271,7 +278,7 @@ export default function NewsTimeline({ locale, signals: externalSignals, onSigna
             ))}
           </div>
         )}
-        <div className="overflow-hidden flex-1 min-h-0 relative" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)} onTouchStart={() => setPaused(true)} onTouchEnd={() => setTimeout(() => setPaused(false), 4000)}>
+        <div ref={viewportRef} data-timeline-viewport role="region" aria-label={locale === 'zh' ? '新闻时间轴列表' : 'News timeline list'} tabIndex={0} className={`flex-1 min-h-0 relative ${paused ? 'overflow-y-auto' : 'overflow-hidden'}`} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
           <div className="absolute top-0 left-0 right-0 h-6 z-10 pointer-events-none" style={{ background: 'linear-gradient(to bottom, var(--bg-card) 0%, transparent 100%)' }} />
           <div className="absolute bottom-0 left-0 right-0 h-6 z-10 pointer-events-none" style={{ background: 'linear-gradient(to top, var(--bg-card) 0%, transparent 100%)' }} />
           {sorted.length === 0 ? (
@@ -281,20 +288,20 @@ export default function NewsTimeline({ locale, signals: externalSignals, onSigna
               <p className="text-[9px] text-dim mt-1">{locale === 'zh' ? '尝试切换上方标签页查看其他类型' : 'Try switching tabs above'}</p>
             </div>
           ) : (
-            <div className="relative py-3 px-4">
-              <div className="absolute left-[132px] top-0 bottom-0 w-px bg-hover" />
+            <div className="relative py-2 px-3">
+              <div className="absolute left-[17px] top-0 bottom-0 w-px bg-hover" />
               <div ref={stripRef} className="will-change-transform" style={{ transform: 'translateY(0px)' }}>
                 <div>{sorted.map((signal, i) => (<div key={signal.id} data-tl><TimelineItem signal={signal} catColor={CAT_COLORS[signal.category] || '#5c5c72'} catLabel={CAT_LABELS[signal.category] || { en: '', zh: '' }} isActive={i === activeIdx} locale={locale} onClick={() => handleClick(signal)} /></div>))}</div>
                 {/* 循环滚动副本：仅作无缝衔接的视觉重复，点击仍打开真实 signal（不伪造 id） */}
-                <div>{sorted.map((signal) => (<div key={`loop-${signal.id}`} data-tl><TimelineItem signal={signal} catColor={CAT_COLORS[signal.category] || '#5c5c72'} catLabel={CAT_LABELS[signal.category] || { en: '', zh: '' }} isActive={false} locale={locale} onClick={() => handleClick(signal)} /></div>))}</div>
+                <div aria-hidden={paused ? undefined : true}>{!paused && sorted.map((signal) => (<div key={`loop-${signal.id}`} data-tl><TimelineItem signal={signal} catColor={CAT_COLORS[signal.category] || '#5c5c72'} catLabel={CAT_LABELS[signal.category] || { en: '', zh: '' }} isActive={false} locale={locale} onClick={() => handleClick(signal)} /></div>))}</div>
               </div>
             </div>
           )}
         </div>
         {sorted.length > 1 && (
           <div className="flex items-center justify-between px-4 py-2 border-t border-edge text-[10px] text-muted shrink-0">
-            <span className="flex items-center gap-1.5"><span className={`w-1.5 h-1.5 rounded-full ${paused ? 'bg-[#f59e0b]' : 'bg-[#06b6d4] animate-pulse-slow'}`} />{paused ? (locale === 'zh' ? '已暂停' : 'Paused') : (locale === 'zh' ? '持续滚动中' : 'Scrolling')}</span>
-            <span className="flex items-center gap-3"><span>{activeIdx + 1} / {sorted.length}</span><button onClick={() => setPaused(p => !p)} className="px-2 py-0.5 text-[9px] rounded border border-edge-light text-ink-2 hover:text-accent hover:border-[#06b6d4]/30 transition-colors">{paused ? (locale === 'zh' ? '▶ 继续' : '▶ Resume') : (locale === 'zh' ? '暂停' : 'Pause')}</button></span>
+            <span className="flex items-center gap-1.5"><span className={`w-1.5 h-1.5 rounded-full ${paused ? 'bg-[#f59e0b]' : 'bg-[#06b6d4] animate-pulse-slow'}`} />{paused ? (locale === 'zh' ? '上下滚动查看更多' : 'Scroll to read') : (locale === 'zh' ? '自动滚动中' : 'Auto scrolling')}</span>
+            <span className="flex items-center gap-3"><span>{paused ? (locale === 'zh' ? `最近${sorted.length}条` : `Latest ${sorted.length}`) : `${activeIdx + 1} / ${sorted.length}`}</span><button onClick={() => setPaused(p => !p)} className="px-2 py-0.5 text-[9px] rounded border border-edge-light text-ink-2 hover:text-accent hover:border-[#06b6d4]/30 transition-colors">{paused ? (locale === 'zh' ? '自动滚动' : 'Auto scroll') : (locale === 'zh' ? '暂停' : 'Pause')}</button></span>
           </div>
         )}
       </div>

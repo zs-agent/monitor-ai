@@ -1,3 +1,4 @@
+import { createHash } from 'crypto'
 import type { Signal } from '@/types/signal'
 import { fetchWithTimeout } from '@/lib/fetch-with-timeout'
 import { inferCountry, sourceCredibility } from '@/lib/normalizer'
@@ -43,12 +44,12 @@ function stripHtml(html: string): string {
 export function normalizeRssItem(item: RssHubItem, route: RssRoute, locale: 'zh' | 'en'): Signal {  const title = item.title || 'Untitled'
   const summary = stripHtml(item.description || '').slice(0, 200)
   return {
-    id: `rss-${Buffer.from(title).toString('base64url').slice(0, 24)}`,
+    id: 'rss-' + createHash('sha256').update(item.link || title).digest('hex').slice(0, 24),
     title,
     summary,
     source: `RSSHub ${route.route.split('/').filter(Boolean)[0] || 'feed'}`,
     sourceUrl: item.link || '',
-    publishedAt: item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(),
+    publishedAt: item.pubDate && Number.isFinite(Date.parse(item.pubDate)) ? new Date(item.pubDate).toISOString() : '',
     category: route.category,
     country: inferCountry(title),
     credibility: route.credibility,

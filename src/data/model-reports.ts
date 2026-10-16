@@ -21,8 +21,9 @@ export interface ModelReportItem {
   vendor: string
   name: string
   type: ModelReportType
-  /** YYYY-MM */
+  /** Publication date; historical references may only have YYYY-MM. */
   date: string
+  updatedAt?: string
   /** 官方来源 */
   sourceUrl: string
   /** 关键技术变化 */

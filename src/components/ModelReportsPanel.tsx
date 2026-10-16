@@ -37,9 +37,10 @@ export default function ModelReportsPanel({ locale }: Props) {
   const { data, loading, error, reload } = useRemoteData<ReportsResponse>('/api/model-reports', [], { refreshInterval: 5 * 60 * 1000 })
   const live = useMemo(() => data?.live ?? [], [data])
   const curated = useMemo(() => data?.curated ?? [], [data])
+  const liveIds = useMemo(() => new Set(live.map(r => r.id)), [live])
   const state = data?.state || 'static'
   const fetchedAt = data?.fetchedAt || null
-  const [tab, setTab] = useState<Tab>('all')
+  const [tab, setTab] = useState<Tab>('live')
   const [typeFilter, setTypeFilter] = useState<(ModelReportType | 'all')>('all')
   const [vendorFilter, setVendorFilter] = useState('all')
 
@@ -58,7 +59,7 @@ export default function ModelReportsPanel({ locale }: Props) {
     ).sort((a, b) => b.date.localeCompare(a.date))
   }, [live, curated, tab, typeFilter, vendorFilter])
 
-  const badge = state === 'live' ? 'live' : state === 'cached' ? 'cached' : state === 'partial' ? 'cached' : 'static'
+  const badge = state === 'live' ? 'live' : state === 'cached' ? 'cached' : state === 'partial' || state === 'stale' ? 'stale' : 'static'
 
   return (
     <PanelBase
@@ -75,7 +76,7 @@ export default function ModelReportsPanel({ locale }: Props) {
         <div className="flex flex-col min-h-0 flex-1">
           {/* 筛选 */}
           <div className="flex items-center gap-1 px-3 pt-2 pb-1.5 border-b border-edge overflow-x-auto">
-            {([['all', locale === 'zh' ? '全部' : 'All'], ['live', 'HF'], ['curated', 'REF']] as [Tab, string][]).map(([k, label]) => (
+            {([['all', locale === 'zh' ? '全部' : 'All'], ['live', locale === 'zh' ? '动态资料' : 'Live'], ['curated', locale === 'zh' ? '历史参考' : 'REF']] as [Tab, string][]).map(([k, label]) => (
               <button
                 key={k}
                 onClick={() => setTab(k)}
@@ -97,7 +98,7 @@ export default function ModelReportsPanel({ locale }: Props) {
               onChange={e => setVendorFilter(e.target.value)}
               className="text-[11px] bg-elevated border border-edge-light rounded px-2 py-1 text-ink outline-none"
             >
-              <option value="all">{locale === 'zh' ? '全部厂商' : 'All vendors'}</option>
+              <option value="all">{locale === 'zh' ? '全部机构 / 维护者' : 'All vendors'}</option>
               {vendors.map(v => <option key={v} value={v}>{v}</option>)}
             </select>
           </div>
@@ -106,7 +107,7 @@ export default function ModelReportsPanel({ locale }: Props) {
           <div className="px-4 py-1.5 border-b border-edge-60 bg-card-2-50 flex items-center gap-2 flex-wrap text-[10px] text-muted">
             <CredibilityTag level={state === 'static' ? 'low' : 'high'} locale={locale} />
             {state === 'static' ? `⚠ ${locale === 'zh' ? '动态源暂不可达，仅显示静态快照' : 'Dynamic source unreachable — static snapshot only'}`
-              : `HF = HuggingFace 动态（${locale === 'zh' ? '最新论文/权重' : 'latest papers & weights'}）· REF = ${locale === 'zh' ? '人工核实快照（2025）' : 'curated snapshot (2025)'}${fetchedAt ? ` · ${locale === 'zh' ? '更新' : 'updated'}: ${fetchedAt.slice(0, 10)}` : ''}`}
+              : `动态来源 = HuggingFace / Semantic Scholar（${locale === 'zh' ? '最新论文/权重' : 'latest papers & weights'}）· REF = ${locale === 'zh' ? '历史参考（需回查原文）' : 'curated snapshot (2025)'}${fetchedAt ? ` · ${locale === 'zh' ? '更新' : 'updated'}: ${fetchedAt.slice(0, 10)}` : ''}`}
           </div>
 
           {/* 列表 */}
@@ -126,11 +127,11 @@ export default function ModelReportsPanel({ locale }: Props) {
                       <span className="text-[10px] font-semibold text-ink">{r.vendor}</span>
                       <span className={`text-[9px] px-1.5 py-0.5 rounded border ${TYPE_CLS[r.type] || 'border-edge text-muted'}`}>{r.type}</span>
                       <span className="text-[9px] text-muted font-mono">{r.date}</span>
-                      <span className={`text-[9px] px-1 py-px rounded ${r.id.startsWith('hf-') || r.id.startsWith('hm-') ? 'bg-accent-bg text-accent' : 'bg-hover text-muted'}`}>
-                        {r.id.startsWith('hf-') || r.id.startsWith('hm-') ? 'HF' : 'REF'}
+                      <span className={`text-[9px] px-1 py-px rounded ${liveIds.has(r.id) ? 'bg-accent-bg text-accent' : 'bg-hover text-muted'}`}>
+                        {liveIds.has(r.id) ? (r.id.startsWith('s2-') ? 'S2' : 'HF') : 'REF'}
                       </span>
-                      <span className={`text-[9px] px-1 py-px rounded ${r.official === false ? 'bg-hover text-muted' : 'bg-emerald-400/10 text-emerald-400'}`}>
-                        {r.official === false ? (locale === 'zh' ? '社区' : 'Community') : (locale === 'zh' ? '官方' : 'Official')}
+                      <span className={`text-[9px] px-1 py-px rounded ${r.official === true ? 'bg-emerald-400/10 text-emerald-400' : 'bg-hover text-muted'}`}>
+                        {r.official === true ? (locale === 'zh' ? '官方' : 'Official') : (locale === 'zh' ? '公开资料' : 'Public')}
                       </span>
                     </div>
                     <a href={r.sourceUrl} target="_blank" rel="noopener noreferrer"
@@ -146,7 +147,7 @@ export default function ModelReportsPanel({ locale }: Props) {
                     </p>}
                     {r.usageImpact ? <p className="text-[11px] text-ink-2">
                       <span className="text-muted">{locale === 'zh' ? '使用影响' : 'Impact'}:</span> {r.usageImpact}
-                    </p> : r.id.startsWith('hf-') || r.id.startsWith('hm-') ? (
+                    </p> : liveIds.has(r.id) ? (
                       <p className="text-[10px] text-dim">{locale === 'zh' ? '使用影响：待结合评测补充' : 'Impact: pending evaluation'}</p>
                     ) : null}
                   </div>
