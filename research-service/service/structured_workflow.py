@@ -8,6 +8,8 @@ from typing import TypedDict
 from langgraph.graph import StateGraph, START, END
 from .research_state import action_options, allocate, apply_research, apply_review, evidence_record, render_report, refresh_dependencies, digest
 from .contracts import DOMAIN_CONTRACT, SchedulerConfig
+from .search_gateway import NoEvidenceFound
+from .search_queries import normalize_query
 
 class WorkflowState(TypedDict, total=False):
     research_state: dict
@@ -41,7 +43,7 @@ class ResearchAdapter:
             if len(records) == 4:
                 break
         if not records:
-            raise SourceAccessError('source_unavailable', '检索没有返回有效的来源地址')
+            raise NoEvidenceFound('检索未找到与该问题匹配的资料，暂不能判断；可核对名称或补充来源')
         self.metrics['pages_requested'] += len(records)
 
         async def acquire(record):
@@ -178,8 +180,14 @@ async def run_structured(task, bus, adapter=None):
         try:
             async def operation():
                 event['search_batches'] = 1
-                search_query = graph['focus'] + ' ' + {'identity':'release version', 'capability':'model benchmark capability', 'deployment':'deployment cost', 'ecosystem':'framework repository', 'risk':'security risk'}[issue['axis']] + ' ' + graph.get('time_scope', '')
-                evidence = await adapter.search(search_query)
+                search_query = normalize_query(graph['focus']) + ' ' + {'identity':'release version', 'capability':'model benchmark capability', 'deployment':'deployment cost', 'ecosystem':'framework repository', 'risk':'security risk'}[issue['axis']] + ' ' + graph.get('time_scope', '')
+                event['search_query'] = search_query.strip()
+                try:
+                    evidence = await adapter.search(search_query)
+                except NoEvidenceFound:
+                    if role == 'research':
+                        raise
+                    evidence = []  # Review can still check the acquired originals.
                 if not isinstance(evidence, list): raise ValueError('evidence must be an array')
                 evidence = [e for e in evidence[:8] if isinstance(e, dict) and e.get('key') and e.get('content')]
                 if role == 'review':
@@ -187,7 +195,7 @@ async def run_structured(task, bus, adapter=None):
                     for key in issue['evidence_keys']:
                         if key in graph['evidence']: fetched.setdefault(key, graph['evidence'][key])
                     evidence = list(fetched.values())[:16]
-                if not evidence: raise ValueError('no usable retrieved evidence')
+                if not evidence: raise NoEvidenceFound('检索未找到与该问题匹配的资料，暂不能判断；可核对名称或补充来源')
                 payload = dict(question=issue['question'], question_id=issue['id'], axis=issue['axis'],
                     task_type=issue.get('task_type', graph['task_type']), time_scope=graph.get('time_scope'),
                     previous_claims=issue['claims'][:12], evidence=evidence, domain_contract=DOMAIN_CONTRACT[issue.get('task_type', graph['task_type'])])
@@ -209,6 +217,7 @@ async def run_structured(task, bus, adapter=None):
                     if issue.get('rejected_outputs'):
                         event['validation_errors'] = issue['rejected_outputs']
                     issue['last_research_failed'] = False
+                    issue.pop('pending_reason', None)
                 else:
                     graph['evidence'].update({e['key']: e for e in evidence})
                     apply_review(graph, action['issue_id'], result)
@@ -219,6 +228,14 @@ async def run_structured(task, bus, adapter=None):
                 return len(evidence)
             event['retrieved_records'] = await asyncio.wait_for(operation(), timeout)
             event['outcome'] = 'completed'
+        except NoEvidenceFound as exc:
+            issue['status'] = 'unresolved'
+            issue['pending_reason'] = str(exc)
+            if role == 'research':
+                issue['last_research_failed'] = True
+            for claim in issue['claims']:
+                claim.update(status='pending_verification', verification_status='pending_verification', update_status='pending')
+            event.update(outcome='no_evidence', error_code='no_evidence', note=str(exc))
         except asyncio.CancelledError:
             event['outcome'] = 'cancelled'
             issue['status'] = 'unresolved'

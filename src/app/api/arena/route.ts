@@ -61,10 +61,14 @@ interface AaModel {
   modelCreatorName: string | null
   intelligenceIndex: number | null
   codingIndex: number | null
+  terminalBench40: number | null
+  scicode: number | null
+  tau2: number | null
   agenticIndex: number | null
   gpqa: number | null
   medianOutputTokensPerSecond: number | null
-  price1mBlended7To2To1: number | null
+  price1mInputTokens: number | null
+  price1mOutputTokens: number | null
   contextWindowTokens: number | null
   isOpenWeights: boolean | null
 }
@@ -89,10 +93,24 @@ async function fetchAaModels(): Promise<AaModel[]> {
   if (!decoded) throw new Error('AA: RSC payload not found')
   const mm = decoded.match(/"models":(\[[\s\S]*?\]),"messages"/)
   if (!mm) throw new Error('AA: models array not found in payload')
-  const models = JSON.parse(mm[1]) as AaModel[]
-
-  // 保留有用字段，剔除无指数/无名称的噪音
-  return models.filter(x => x && x.name && (x.intelligenceIndex != null || x.codingIndex != null || x.agenticIndex != null))
+  const rows: unknown = JSON.parse(mm[1])
+  if (!Array.isArray(rows)) throw new Error('AA: invalid models payload')
+  const number = (value: unknown): number | null => typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
+  const rate = (value: unknown): number | null => { const n = number(value); return n != null && n <= 1 ? n : null }
+  return rows.flatMap((raw: unknown): AaModel[] => {
+    if (!raw || typeof raw !== 'object') return []
+    const row = raw as Record<string, unknown>
+    if (typeof row.name !== 'string' || !row.name.trim() || row.deprecated === true) return []
+    return [{
+      name: row.name.trim(), modelCreatorName: typeof row.modelCreatorName === 'string' ? row.modelCreatorName : null,
+      intelligenceIndex: number(row.intelligenceIndex), codingIndex: number(row.codingIndex),
+      agenticIndex: number(row.agenticIndex), terminalBench40: rate(row.terminalBench40),
+      scicode: rate(row.scicode), tau2: rate(row.tau2), gpqa: rate(row.gpqa),
+      medianOutputTokensPerSecond: number(row.medianOutputTokensPerSecond),
+      price1mInputTokens: number(row.price1mInputTokens), price1mOutputTokens: number(row.price1mOutputTokens),
+      contextWindowTokens: number(row.contextWindowTokens), isOpenWeights: row.isOpenWeights === true,
+    }]
+  })
 }
 
 /** 按数值字段排序取前 N，构造 entries；score 由 formatter 生成 */
@@ -122,11 +140,6 @@ function fmtContext(tokens: number): string {
   return String(tokens)
 }
 
-/** 取静态快照中某维度的 entries，用于动态源不可达时的兜底（标注 REF） */
-function staticEntries(dimension: string): ArenaEntry[] {
-  return ARENA_BOARDS.find(b => b.dimension === dimension)?.entries ?? []
-}
-
 export async function GET() {
   const now = Date.now()
 
@@ -136,14 +149,15 @@ export async function GET() {
       fetchedAt: new Date(arenaCache.fetchedAt).toISOString(),
       boards: arenaCache.boards,
       staticBoards: ARENA_BOARDS,
-      note: '动态榜单来自 Artificial Analysis（Intelligence/Coding/Agentic Index 等）；静态快照为人工核实（REF）',
+      note: '动态榜单来自Artificial Analysis；编程/工具调用使用标注的具体基准，成本分别显示输入/输出价；REF为历史参考快照',
     })
   }
 
   let models: AaModel[] = []
   try {
     models = await fetchAaModels()
-  } catch {
+  } catch (error) {
+    console.warn('Arena source unavailable:', error instanceof Error ? error.message : String(error))
     // 全部失败 → static 快照
     return NextResponse.json({
       state: 'static',
@@ -161,6 +175,7 @@ export async function GET() {
     date: '实时抓取',
     methodology,
     entries,
+    ...(entries.length ? {} : { unavailableReason: "上游暂未提供此项可用数据，未用其他维度分数代替。" }),
   })
 
   const boards: ArenaBoard[] = [
@@ -169,13 +184,13 @@ export async function GET() {
       'Artificial Analysis（Intelligence Index）', AA_URL,
       'AA 综合智能指数（0-100），融合多任务基准，越高越强'),
     mk('编程能力',
-      rankEntries(models, x => x.codingIndex, (x, v) => v.toFixed(1), 8),
-      'Artificial Analysis（Coding Index）', AA_URL,
-      'AA 编程指数（0-100），覆盖代码生成/修复基准'),
+      rankEntries(models, x => x.terminalBench40, (x, v) => (v * 100).toFixed(1) + '%', 8),
+      'Artificial Analysis（Terminal-Bench 4.0）', 'https://artificialanalysis.ai/methodology/intelligence-benchmarking',
+      'Terminal-Bench 4.0终端编程任务成功率；只在同一基准和版本内比较，未测量的模型不参与排名'),
     mk('Agent 工具调用',
-      rankEntries(models, x => x.agenticIndex, (x, v) => v.toFixed(1), 8),
-      'Artificial Analysis（Agentic Index）', AA_URL,
-      'AA Agent 能力指数（0-100），覆盖工具调用/多步骤任务'),
+      rankEntries(models, x => x.tau2, (x, v) => (v * 100).toFixed(1) + '%', 8),
+      'Artificial Analysis（τ²-Bench Telecom）', 'https://artificialanalysis.ai/evaluations/tau2-bench',
+      'τ²-Bench Telecom多轮工具调用任务成功率；仅覆盖该场景，不等于所有Agent任务的综合能力'),
     mk('推理能力',
       rankEntries(models, x => x.gpqa, (x, v) => `${(v * 100).toFixed(0)}%`, 8),
       'Artificial Analysis（GPQA）', AA_URL,
@@ -185,10 +200,10 @@ export async function GET() {
       'Artificial Analysis', AA_URL,
       'Median output speed（tokens/s），因硬件/量化而异，仅作量级参考'),
     mk('API 成本',
-      rankEntries(models, x => x.price1mBlended7To2To1, (x, v) => `$${v.toFixed(2)}/M`, 8,
-        { filter: x => x.price1mBlended7To2To1 != null, ascending: true }),
-      'Artificial Analysis', AA_URL,
-      'Blended price per 1M tokens（7:2:1 输入输出混合），随厂商调价更新'),
+      rankEntries(models, x => x.price1mInputTokens, (x, v) => '$' + v.toLocaleString('en-US', { maximumFractionDigits: 5 }) + ' / $' + x.price1mOutputTokens!.toLocaleString('en-US', { maximumFractionDigits: 5 }), 8,
+        { filter: x => x.price1mInputTokens != null && x.price1mOutputTokens != null, ascending: true }),
+      'Artificial Analysis（输入/输出单价）', AA_URL,
+      '输入价 / 输出价，单位：美元/百万Token；按输入价从低到高排列，不含缓存折扣与实际任务的Token消耗'),
     mk('长上下文',
       rankEntries(models, x => x.contextWindowTokens, (x, v) => fmtContext(v), 8),
       'Artificial Analysis', AA_URL,
@@ -205,6 +220,6 @@ export async function GET() {
     fetchedAt: new Date(now).toISOString(),
     boards,
     staticBoards: ARENA_BOARDS,
-    note: '动态榜单来自 Artificial Analysis（Intelligence/Coding/Agentic Index 等）；静态快照为人工核实（REF）',
+    note: '动态榜单来自Artificial Analysis；编程/工具调用使用标注的具体基准，成本分别显示输入/输出价；REF为历史参考快照',
   })
 }

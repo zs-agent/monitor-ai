@@ -443,7 +443,7 @@ def render_report(state):
     for key, issue in sorted(state["issues"].items()):
         lines.extend(["", "## " + issue["question"], f"处理结果：{issue_labels.get(issue['status'], '待核查')}；第{issue['revision']}版"])
         if not issue["claims"]:
-            lines.append("本次安排内尚未形成结论，保留待核查。")
+            lines.append(issue.get("pending_reason") or "本次安排内尚未形成结论，保留待核查。")
         for claim in issue["claims"]:
             verified = claim.get('verification_status', claim['status']) == 'supported' and issue['status'] != 'pending'
             label = '沿用' if verified and issue['status'] == 'carried' else '已核查' if verified else '待核查'

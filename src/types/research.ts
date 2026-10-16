@@ -12,6 +12,7 @@ export interface Claim {
 }
 export interface Issue {
   id: string; axis: string; question: string; status: QuestionStatus; revision: number; claims: Claim[]; task_type?: TaskType
+  pending_reason?: string
   features?: { t: string; n: number; u: number; c: number; priority: number; contributions?: Record<string, number> }
   history?: { revision: number; claims: Claim[] }[]
 }

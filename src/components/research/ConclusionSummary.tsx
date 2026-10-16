@@ -45,7 +45,7 @@ export default function ConclusionSummary({ state }: { state: ResearchState }) {
       const others = question.claims.filter(claim => claim !== primary)
       return <div key={question.id} className="space-y-3">
         {questions.length > 1 && <h3 className="text-[12px] font-semibold text-ink-2">{question.question}</h3>}
-        {primary ? finding(primary, question.status === 'carried', question.status === 'pending') : <p className="text-warning text-[13px]">本次尚未形成可核查结论，需补充资料或增加研究次数。</p>}
+        {primary ? finding(primary, question.status === 'carried', question.status === 'pending') : <p className="text-warning text-[13px]">{question.pending_reason || '本次尚未形成可核查结论，需补充资料或增加研究次数。'}</p>}
         {!!others.length && <details className="text-[12px]"><summary className="cursor-pointer text-accent">其余{others.length}条结论与证据</summary><div className="mt-3 space-y-5">{others.map(claim => finding(claim, question.status === 'carried', question.status === 'pending'))}</div></details>}
       </div>
     })}

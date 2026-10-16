@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useEffect, useMemo, useState } from 'react'
 import type { Locale } from '@/lib/i18n'
@@ -64,7 +64,7 @@ export default function ArenaPanel({ locale, focus }: Props) {
   }, [boards, staticBoards])
 
   const sourceTag = (b: ArenaBoard): 'AA' | 'HF' | 'PENDING' | 'REF' => {
-    if (b.entries.length === 0 && b.source === '待接入') return 'PENDING'
+    if (b.entries.length === 0) return 'PENDING'
     if (b.source.includes('Artificial Analysis')) return 'AA'
     if (b.source.includes('HuggingFace')) return 'HF'
     return 'REF'
@@ -121,10 +121,10 @@ export default function ArenaPanel({ locale, focus }: Props) {
               <span className="w-px h-3 bg-edge" />
               <span>{locale === 'zh' ? '时间' : 'Date'}: {board?.date}</span>
               <span className="w-px h-3 bg-edge" />
-              <span className={tag === 'AA' || tag === 'HF' ? 'text-accent' : tag === 'PENDING' ? 'text-dim' : ''}>{tag === 'AA' || tag === 'HF' ? '动态' : tag === 'PENDING' ? (locale === 'zh' ? '待接入' : 'pending') : 'REF'}</span>
+              <span className={tag === 'AA' || tag === 'HF' ? 'text-accent' : tag === 'PENDING' ? 'text-dim' : ''}>{tag === 'AA' || tag === 'HF' ? '动态' : tag === 'PENDING' ? (locale === 'zh' ? '暂无数据' : 'unavailable') : 'REF'}</span>
             </div>
             <p className="text-[10px] text-muted mt-0.5">{locale === 'zh' ? '口径' : 'Method'}: {board?.methodology}</p>
-            <p className="text-[9px] text-dim mt-0.5">⚠ {locale === 'zh' ? '各维度分数口径不同（Elo/指数/成功率/下载量），横向比较请以排名为准' : 'Scores use different metrics (Elo/index/success rate/downloads); compare by rank'}</p>
+            <p className="text-[9px] text-dim mt-0.5">⚠ {locale === 'zh' ? '请在同一维度和基准内比较，不同维度的分数与名次不能直接混比' : 'Compare within the same metric and benchmark; scores and ranks across dimensions are not equivalent'}</p>
           </div>
 
           {/* 对比条（勾选 ≥1 时显示） */}
@@ -154,7 +154,7 @@ export default function ArenaPanel({ locale, focus }: Props) {
             ) : !board || board.entries.length === 0 ? (
               <div className="flex flex-col items-center py-10 text-center">
                 <span className="text-2xl mb-2 opacity-30">◇</span>
-                <p className="text-[12px] text-muted">{locale === 'zh' ? '当前维度暂无数据' : 'No data for this dimension'}</p>
+                <p className="text-[12px] text-muted">{locale === 'zh' ? '当前维度暂无数据' : 'No data for this dimension'}</p><p className="mt-2 text-[11px] text-muted max-w-sm">{board?.unavailableReason || (locale === 'zh' ? '来源暂未返回可用测量值，请稍后刷新。' : 'The source has not returned a usable measurement.')}</p>
               </div>
             ) : (
               <table className="w-full text-[11px]">
@@ -164,7 +164,7 @@ export default function ArenaPanel({ locale, focus }: Props) {
                     <th className="py-1.5 pr-2 text-[9px] uppercase tracking-wider text-muted w-8">#</th>
                     <th className="py-1.5 pr-2 text-[9px] uppercase tracking-wider text-muted">{locale === 'zh' ? '模型' : 'Model'}</th>
                     <th className="py-1.5 pr-2 text-[9px] uppercase tracking-wider text-muted hidden sm:table-cell">{locale === 'zh' ? '厂商' : 'Org'}</th>
-                    <th className="py-1.5 text-right text-[9px] uppercase tracking-wider text-muted">{locale === 'zh' ? '成绩' : 'Score'}</th>
+                    <th className="py-1.5 text-right text-[9px] uppercase tracking-wider text-muted">{board?.dimension === 'API 成本' ? (locale === 'zh' ? '输入 / 输出 $/百万Token' : 'Input / Output $/M tokens') : (locale === 'zh' ? '成绩' : 'Score')}</th>
                   </tr>
                 </thead>
                 <tbody>

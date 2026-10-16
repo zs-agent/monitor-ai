@@ -28,6 +28,8 @@ export interface ArenaBoard {
   /** 测试口径说明 */
   methodology: string
   entries: ArenaEntry[]
+  /** 当前数据源缺测时给出原因，不使用其他基准冒充 */
+  unavailableReason?: string
 }
 
 export interface ArenaEntry {

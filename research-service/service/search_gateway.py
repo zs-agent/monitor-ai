@@ -21,28 +21,64 @@ async def openalex(query):
                  published_at=row.get('publication_date') or '') for row in payload['results'] if isinstance(row, dict)]
 
 
+class NoEvidenceFound(ValueError):
+    """Search completed but supplied no usable evidence, not a runtime failure."""
+    code = 'no_evidence'
+
+
 async def duckduckgo(query):
-    from gpt_researcher.retrievers.duckduckgo.duckduckgo import Duckduckgo
-    retriever = Duckduckgo(query)
-    return await asyncio.wait_for(asyncio.to_thread(retriever.search, max_results=4), timeout=12)
+    from ddgs import DDGS
+    from ddgs.exceptions import DDGSException
+    def retrieve():
+        try:
+            rows = DDGS(timeout=5).text(query, region='wt-wt', max_results=4, backend='google,brave,duckduckgo')
+        except DDGSException as exc:
+            # This exact message is the pinned client's genuine empty result.
+            # Transport/timeouts/rate limits must retain their exception type.
+            if type(exc) is DDGSException and str(exc) == 'No results found.':
+                return []
+            raise
+        result = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            url = row.get('href') or row.get('url') or row.get('link')
+            if url:
+                result.append(dict(href=url, title=row.get('title') or '', body=row.get('body') or row.get('snippet') or row.get('description') or ''))
+        return result[:4]
+    return await asyncio.wait_for(asyncio.to_thread(retrieve), timeout=12)
 
 
 async def search(query, researcher, metrics):
+    from .search_queries import normalize_query, simplified_query
+    query = normalize_query(query)
     primary = os.environ.get('RETRIEVER', 'tavily').split(',')[0].strip()
-    providers = [(primary, lambda: openalex(query) if primary == 'openalex' else researcher.quick_search(query, aggregated_summary=False))]
-    if primary != 'duckduckgo' and os.environ.get('RESEARCH_SEARCH_FALLBACK', 'duckduckgo') == 'duckduckgo':
-        providers.append(('duckduckgo', lambda: duckduckgo(query)))
+    async def initial(q):
+        if primary == 'openalex': return await openalex(q)
+        if primary == 'duckduckgo': return await duckduckgo(q)
+        return await researcher.quick_search(q, aggregated_summary=False)
+    providers = [(primary, initial, query, 'normalized')]
+    web_enabled = primary == 'duckduckgo' or os.environ.get('RESEARCH_SEARCH_FALLBACK', 'duckduckgo') == 'duckduckgo'
+    if primary != 'duckduckgo' and web_enabled:
+        providers.append(('duckduckgo', duckduckgo, query, 'normalized'))
+    short = simplified_query(query)
+    if web_enabled and short and short != query:
+        providers.append(('duckduckgo', duckduckgo, short, 'simplified'))
+    if web_enabled and primary == 'openalex' and any(term in query.lower() for term in ('overall benchmark ranking', 'leaderboard', '排行榜', '排名')):
+        # Current ranking questions are web evidence tasks, not paper discovery.
+        providers = [row for row in providers if row[0] == 'duckduckgo'] + [row for row in providers if row[0] != 'duckduckgo']
     attempts = metrics.setdefault('retrieval_attempts', [])
-    for name, retrieve in providers:
+    current, final_outcomes = [], {}
+    for name, retrieve, words, variant in providers:
         metrics['retriever_calls'] += 1
-        attempt = dict(provider=name, outcome='started')
+        attempt = dict(provider=name, outcome='started', query=words, query_variant=variant)
         attempts.append(attempt)
+        current.append(attempt)
         try:
-            rows = await asyncio.wait_for(retrieve(), timeout=15)
+            rows = await asyncio.wait_for(retrieve(words), timeout=15)
             if not isinstance(rows, list): raise ValueError('retrieval returned non-list results')
             rows = [row for row in rows if isinstance(row, dict) and any(row.get(k) for k in ('url', 'href', 'sourceUrl'))]
-            attempt['results'] = len(rows)
-            attempt['outcome'] = 'completed' if rows else 'empty'
+            attempt.update(results=len(rows), outcome='completed' if rows else 'empty')
             if rows: return rows
         except asyncio.CancelledError:
             attempt['outcome'] = 'cancelled'
@@ -50,5 +86,8 @@ async def search(query, researcher, metrics):
         except Exception as exc:
             attempt.update(outcome='failed', error_class=type(exc).__name__)
             if isinstance(exc, httpx.HTTPStatusError): attempt['http_status'] = exc.response.status_code
-        metrics.setdefault('retrieval_errors', []).append(dict(attempt))
-    raise RuntimeError('检索服务未返回可用资料；已尝试：' + ', '.join(f"{x['provider']}={x.get('http_status', x['outcome'])}" for x in attempts[-len(providers):]))
+            metrics.setdefault('retrieval_errors', []).append(dict(attempt))
+        final_outcomes[name] = attempt['outcome']
+    if final_outcomes and all(outcome == 'empty' for outcome in final_outcomes.values()):
+        return []
+    raise RuntimeError('检索服务请求失败；已尝试：' + ', '.join(f"{x['provider']}={x.get('http_status', x.get('error_class', x['outcome']))}" for x in current))

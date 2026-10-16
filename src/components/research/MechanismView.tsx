@@ -83,7 +83,7 @@ export default function MechanismView({ state, preview = false, taskId, onCorrec
             {!!allocation?.candidates?.[q.id]?.length && <details><summary className="cursor-pointer text-muted text-[10px]">查看备选安排与评分</summary><div className="flex flex-wrap gap-2 mt-2">{allocation.candidates[q.id].map(a => <span key={a.kind} className={`border rounded p-1 ${pick?.kind === a.kind ? 'border-accent text-accent' : 'border-edge text-muted'}`}>{actionLabel[a.kind]} · 次数 {a.cost} / 评分 {a.utility}</span>)}</div></details>}
           </div>
         })}
-        <details><summary className="text-accent cursor-pointer">实际动作开销与异常记录</summary>{state.actions?.map((a, i) => <p key={i} className="py-2 break-all">{a.kind === 'research' ? '研究' : a.kind === 'review' ? '核查' : a.kind} · {{ completed: '完成', failed: '失败', cancelled: '已取消', skipped_no_new_claims: '无新结论，跳过' }[a.outcome] || a.outcome} · {a.elapsed_sec ?? 0}s · Token {a.input_tokens == null ? '未知' : `${a.input_tokens}入/${a.output_tokens}出`}{a.error && <span className="block text-warning mt-1">失败原因：{a.error.replace(/^\w*Error:\s*/, '')}</span>}</p>)}</details>
+        <details><summary className="text-accent cursor-pointer">实际动作开销与异常记录</summary>{state.actions?.map((a, i) => <p key={i} className="py-2 break-all">{a.kind === 'research' ? '研究' : a.kind === 'review' ? '核查' : a.kind} · {{ completed: '完成', no_evidence: '资料不足，待核查', failed: '失败', cancelled: '已取消', skipped_no_new_claims: '无新结论，跳过' }[a.outcome] || a.outcome} · {a.elapsed_sec ?? 0}s · Token {a.input_tokens == null ? '未知' : `${a.input_tokens}入/${a.output_tokens}出`}{a.error && <span className="block text-warning mt-1">失败原因：{a.error.replace(/^\w*Error:\s*/, '')}</span>}</p>)}</details>
       </>}
       {tab === 2 && <>
         <div className="grid grid-cols-2 gap-2">{[['added', '新增'], ['changed', '内容变化'], ['absent_from_snapshot', '本次缺失 · 待核查'], ['stable', '稳定']].map(([key, label]) => <details key={key} className="border border-edge rounded p-2"><summary className="cursor-pointer">{label} · {state.delta[key]?.length ?? 0}</summary>{state.delta[key]?.map(e => <div key={e} className="mt-2 break-all text-muted">{state.evidence[e]?.title || e}<div className="font-mono text-[10px]">{state.evidence[e]?.fingerprint?.slice(0, 20)}</div></div>)}</details>)}</div>
@@ -97,7 +97,7 @@ export default function MechanismView({ state, preview = false, taskId, onCorrec
         {selected && <div className="border border-accent rounded p-3 space-y-3">
           <b>{selected.question} · 修订 v{selected.revision}</b>
           <div className="text-muted font-mono">Q {selected.id} → C → E</div>
-          {!selected.claims.length && <p className="text-warning">尚未形成结论，本次预算可能暂缓。</p>}
+          {!selected.claims.length && <p className="text-warning">{selected.pending_reason || '尚未形成结论，本次预算可能暂缓。'}</p>}
           {selected.claims.map((c, index) => <details key={c.id || index} className="border border-edge rounded p-2">
             <summary className="cursor-pointer">{selected.status === 'carried' ? '🟢 沿用' : c.status === 'supported' ? c.update_label === 'new' ? '🟡 新增 / 已核查' : '🟡 局部修订 / 已核查' : '🔴 待核查 / 依据不足'} · {c.text}</summary>
             <p className="mt-2 text-muted">核查：{statusLabel[c.verification_status || c.status] || '待核查'} · 更新：{statusLabel[c.update_status || 'pending']} · {c.review?.reason || c.uncertainty || '尚未完成审核'}</p>

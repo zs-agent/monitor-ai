@@ -24,7 +24,7 @@ function eventSummary(event: RunEvent): string {
     const data = JSON.parse(output)
     if (event.event === 'structured_plan') return `安排 ${data.selected?.length ?? 0} 个问题，预留 ${data.reserved_units ?? 0} 次研究与核查；${data.deferred?.length ?? 0} 个问题暂缓。`
     if (event.event === 'structured_feedback') return `审核发现缺口，剩余 ${data.remaining ?? 0} 次额度，追加 ${data.actions?.length ?? 0} 次补查。`
-    if (event.event === 'structured_progress') return `已使用 ${data.spent_units ?? 0} 次；本次${({ completed: '完成', failed: '失败', cancelled: '取消' } as Record<string, string>)[data.outcome] || '处理中'}。`
+    if (event.event === 'structured_progress') return `已使用 ${data.spent_units ?? 0} 次；本次${({ completed: '完成', no_evidence: '资料不足，待核查', failed: '失败', cancelled: '取消' } as Record<string, string>)[data.outcome] || '处理中'}。`
     return '处理记录已保存。'
   } catch { return output }
 }
