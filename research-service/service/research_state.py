@@ -32,7 +32,7 @@ AXIS_WORDS = {
     "identity": ("release", "version", "发布", "版本"),
     "capability": ("release", "version", "发布", "版本", "model", "benchmark", "paper", "能力", "模型", "论文", "性能"),
     "deployment": ("cost", "deploy", "hardware", "quant", "gpu", "成本", "部署", "推理", "显存", "量化"),
-    "ecosystem": ("repo", "framework", "生态", "框架", "维护", "开源"),
+    "ecosystem": ("repo", "framework", "生态", "框架", "维护", "开源", "仓库"),
     "risk": ("risk", "security", "风险", "安全", "限制"),
 }
 
@@ -42,6 +42,8 @@ def digest(value):
 
 
 def tokens(text):
+    from .search_queries import normalize_query
+    text = normalize_query(str(text))
     words = set(re.findall(r"[a-z0-9][a-z0-9_.-]*", str(text).lower()))
     for part in re.findall(r"[\u4e00-\u9fff]+", str(text)):
         words.update(part[i:i + 2] for i in range(len(part) - 1))
@@ -442,6 +444,8 @@ def render_report(state):
     issue_labels = dict(pending='待核查', draft='已研究，待核查', reviewed='已完成核查', carried='沿用历史结论', unresolved='仍有待核查内容')
     for key, issue in sorted(state["issues"].items()):
         lines.extend(["", "## " + issue["question"], f"处理结果：{issue_labels.get(issue['status'], '待核查')}；第{issue['revision']}版"])
+        if issue.get('pending_reason') and issue['claims']:
+            lines.append(issue['pending_reason'])
         if not issue["claims"]:
             lines.append(issue.get("pending_reason") or "本次安排内尚未形成结论，保留待核查。")
         for claim in issue["claims"]:
@@ -467,6 +471,11 @@ def render_report(state):
         f"资料新增{len(delta.get('added', []))}条、变化{len(delta.get('changed', []))}条、稳定{len(delta.get('stable', []))}条、本次未出现{len(delta.get('absent_from_snapshot', []))}条。",
         f"需要复核{len(state['affected'])}个问题；稳定沿用{sum(q['status'] == 'carried' for q in state['issues'].values())}个问题。",
         f"研究与核查已用{allocation.get('spent_units', 0)}次，最多{allocation.get('budget_units', 0)}次。详细过程与来源版本可在研究过程面板查看。"])
+    warnings = list(dict.fromkeys(w['reason'] for a in state.get('actions', []) for w in a.get('retrieval_warnings', [])))
+    if any(a.get('error_code') == 'retrieval_unavailable' for a in state.get('actions', [])):
+        warnings.append('部分问题检索暂不可用，已保留其他研究结果；缺少证据的问题暂不能判断。')
+    if warnings:
+        lines.extend(['', '## 资料范围与限制'] + ['- ' + text for text in warnings])
     return "\n".join(lines)
 
 

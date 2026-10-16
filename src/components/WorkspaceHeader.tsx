@@ -4,6 +4,8 @@ import { useMemo, useRef, useEffect, useState } from 'react'
 import type { Locale } from '@/lib/i18n'
 import type { Signal } from '@/types/signal'
 import type { DataFreshnessSummary, DataSourceState } from '@/lib/data-freshness'
+import { useRemoteData } from '@/lib/use-remote-data'
+import type { CoverageResponse } from '@/types/coverage'
 import { sourceMetaMap } from '@/lib/source-meta'
 
 interface Props {
@@ -62,6 +64,7 @@ export interface GlobalSearchData {
 const EMPTY_GLOBAL: GlobalSearchData = { projects: [], models: [], reports: [], articles: [] }
 
 export default function WorkspaceHeader({ locale, signals, freshness, sourceStates, fetchedAt, dataState, onRefresh, onSearch, refreshing, globalData = EMPTY_GLOBAL, onSignalClick, onModelSelect }: Props) {
+  const { data: coverage, error: coverageError } = useRemoteData<CoverageResponse>('/api/coverage', [], { refreshInterval: 10 * 60 * 1000 })
   const [q, setQ] = useState('')
   const [focused, setFocused] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -77,18 +80,23 @@ export default function WorkspaceHeader({ locale, signals, freshness, sourceStat
   useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current) }, [])
 
   const kpis = useMemo(() => {
-    const papers = signals.filter(s => s.category === 'papers').length
-    const models = signals.filter(s => s.category === 'models').length
-    const github = signals.filter(s => s.source === 'GitHub').length
     const high = signals.filter(s => s.importance >= 4).length
-    return [
-      { key: 'total', label: locale === 'zh' ? '信号总数' : 'Signals', value: signals.length, hint: locale === 'zh' ? '过去 24 小时聚合' : 'last 24h aggregated' },
-      { key: 'high', label: locale === 'zh' ? '高价值信号' : 'High Value', value: high, hint: locale === 'zh' ? '重要性 ≥ 4' : 'importance ≥ 4' },
-      { key: 'papers', label: locale === 'zh' ? '论文' : 'Papers', value: papers, hint: 'arXiv / HF / S2' },
-      { key: 'models', label: locale === 'zh' ? '模型动态' : 'Models', value: models, hint: locale === 'zh' ? '发布与更新' : 'releases & updates' },
-      { key: 'github', label: locale === 'zh' ? '开源项目' : 'Open Source', value: github, hint: 'GitHub' },
+    const local = [
+      { key: 'total', label: locale === 'zh' ? (dataState === 'mock' ? '样例线索' : '已收录线索') : 'Loaded signals', value: signals.length.toLocaleString(), hint: locale === 'zh' ? '当前加载的资料' : 'Current feed', title: locale === 'zh' ? '下方可查看的资料条数，非全网去重总量' : 'Loaded feed, not a global total', url: undefined as string | undefined },
+      { key: 'high', label: locale === 'zh' ? '高价值线索' : 'High value', value: high.toLocaleString(), hint: locale === 'zh' ? '已收录 · 重要性≥4' : 'Loaded · importance ≥4', title: locale === 'zh' ? '当前已收录资料中的高价值条目' : 'High value items in the feed', url: undefined as string | undefined },
     ]
-  }, [signals, locale])
+    const labels = { papers: ['AI相关文献', 'AI literature'], models: ['公开模型仓库', 'Public model repos'], projects: ['AI公开项目', 'Public AI repos'] }
+    for (const kind of ['papers', 'models', 'projects'] as const) {
+      const item = coverage?.totals.find(row => row.kind === kind)
+      const stale = !!coverageError || item?.status === 'stale'
+      const value = item?.count == null ? '—' : new Intl.NumberFormat(locale === 'zh' ? 'zh-CN' : 'en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(item.count)
+      const suffix = stale ? (locale === 'zh' ? ' · 上次记录' : ' · stale') : ''
+      local.push({ key: kind, label: labels[kind][locale === 'zh' ? 0 : 1], value: (item?.approximate ? '≈' : '') + value,
+        hint: (item?.source || (locale === 'zh' ? '来源索引总量' : 'Source index')) + suffix,
+        title: item?.count != null ? item.scope + '\n' + item.count.toLocaleString() + (item.approximate ? '（来源返回不完整结果）' : '') + '\n' + (locale === 'zh' ? '核对时间：' : 'Checked: ') + fmtTime(item.observedAt, locale) + suffix : (locale === 'zh' ? '来源总数暂不可用，等待更新' : 'Source total unavailable'), url: item?.url })
+    }
+    return local
+  }, [signals, locale, coverage, coverageError, dataState])
 
   const freshCount = freshness?.activeSources ?? 0
 
@@ -110,7 +118,7 @@ export default function WorkspaceHeader({ locale, signals, freshness, sourceStat
           </p>
         </div>
 
-        <div className="flex items-center gap-3 flex-wrap shrink-0">
+        <div className="flex items-center gap-3 flex-wrap max-w-full">
           {/* 数据更新时间 */}
           <div className="flex items-center gap-2 text-[11px] text-muted bg-card border border-edge rounded-lg px-3 py-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-accent" />
@@ -118,14 +126,14 @@ export default function WorkspaceHeader({ locale, signals, freshness, sourceStat
             <span className="font-mono text-ink-2">{fmtTime(fetchedAt, locale)}</span>
           </div>
           {/* 数据源状态（4 源：状态点 + 缩写 + 条目数） */}
-          <div className="flex items-center gap-2.5 text-[10px] bg-card border border-edge rounded-lg px-3 py-1.5"
+          <div className="flex flex-wrap items-center gap-2.5 max-w-full text-[10px] bg-card border border-edge rounded-lg px-3 py-1.5"
             title={locale === 'zh' ? '数据源状态' : 'Source health'}>
             {sourceStates.length === 0 && <span className="text-dim">—</span>}
             {sourceStates.map(s => {
               const ok = s.status === 'fresh' || s.status === 'stale' || s.status === 'very_stale'
               return (
-                <span key={s.id} className="flex items-center gap-1" title={`${s.name} · ${s.itemCount} items`}>
-                  <span className={`w-1.5 h-1.5 rounded-full ${ok ? 'bg-emerald-400' : 'bg-red-400'}`} />
+                <span key={s.id} className="flex items-center gap-1" title={s.status === 'no_data' ? s.name + ' · 尚未探测' : `${s.name} · ${s.itemCount} items`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${ok ? 'bg-emerald-400' : s.status === 'error' ? 'bg-red-400' : 'bg-dim'}`} />
                   <span className="text-ink-2 font-mono">{sourceMetaMap[s.id]?.short || s.id}</span>
                   <span className="text-dim font-mono">{s.itemCount}</span>
                 </span>
@@ -172,15 +180,15 @@ export default function WorkspaceHeader({ locale, signals, freshness, sourceStat
         </div>
 
         {/* KPI 组 */}
-        <div className="flex items-center gap-2 flex-wrap">
+        <div><div className="flex items-center gap-2 flex-wrap" data-testid="coverage-cards">
           {kpis.map(k => (
-            <div key={k.key} className="bg-card border border-edge rounded-lg px-3.5 py-1.5 min-w-[92px]">
-              <div className="text-[10px] uppercase tracking-wider text-muted">{k.label}</div>
+            <div key={k.key} title={k.title} className="bg-card border border-edge rounded-lg px-3.5 py-1.5 min-w-[92px]">
+              <div className="text-[10px] tracking-wider text-muted">{k.url ? <a href={k.url} target="_blank" rel="noopener noreferrer" className="hover:text-accent">{k.label} ↗</a> : k.label}</div>
               <div className="text-[18px] font-semibold text-ink font-mono leading-tight">{k.value}</div>
               <div className="text-[9px] text-dim">{k.hint}</div>
             </div>
           ))}
-        </div>
+        </div><p className="text-[9px] text-dim mt-1">{locale === 'zh' ? '后三项为各来源索引总量，每6小时核对；口径不同，不相加。悬停查看范围与时间。' : 'Last three: source index totals, checked every 6h. Separate scopes; do not add.'}</p></div>
       </div>
     </div>
   )

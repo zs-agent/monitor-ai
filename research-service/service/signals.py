@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import math
+from datetime import datetime
 from pathlib import Path
 
 SERVICE_ROOT = Path(__file__).resolve().parents[1]
@@ -52,8 +53,9 @@ def select_signals(
     top: int = 12,
     exclude_providers: tuple[str, ...] = ("github",),
     max_per_provider: int = 4,
+    focus: str | None = None,
 ) -> list[dict]:
-    """按可信度与来源过滤，再按 importance/sourcesCount/credibility 取头部信号。
+    """按可信度与来源过滤，优先主题相关性，再按价值、可信度与时间挑选。
 
     - GitHub Trending 默认剔除：快照里多为 awesome-list 与旧仓库，对技术趋势判断是噪声。
     - 单来源配额（max_per_provider）：不设限时 Hacker News 的 importance 会挤掉全部论文/
@@ -65,6 +67,21 @@ def select_signals(
             return parsed if math.isfinite(parsed) else 0.0
         except (ValueError, TypeError):
             return 0.0
+    from .research_state import tokens, similarity
+    from .search_queries import normalize_query
+    normalized = normalize_query(focus or '')
+    focus_terms = tokens(normalized)
+    # Object names/version terms outrank generic domain words before truncation.
+    specific = focus_terms - {'ai', 'model', 'models', 'agent', 'agents', 'benchmark', 'overall', 'ranking', 'research', 'llm'}
+    def ranking(s):
+        text = str(s.get('title') or '') + ' ' + str(s.get('summary') or '') + ' ' + str(s.get('sourceUrl') or '')
+        overlap = len(specific & tokens(normalize_query(text))) if specific else 0
+        relevance = similarity(normalized, text) if normalized else 0
+        try:
+            published = datetime.fromisoformat(str(s.get('publishedAt') or '').replace('Z', '+00:00')).timestamp()
+        except (ValueError, TypeError, OverflowError, OSError):
+            published = 0
+        return (overlap, relevance, number(s.get('importance')), number(s.get('sourcesCount')), number(s.get('credibility')), published)
     picked: list[dict] = []
     per_provider: dict[str, int] = {}
     for s in sorted(
@@ -75,11 +92,7 @@ def select_signals(
             and s.get("providerId") not in exclude_providers
             and (not categories or s.get("category") in categories)
         ),
-        key=lambda s: (
-            number(s.get("importance")),
-            number(s.get("sourcesCount")),
-            number(s.get("credibility")),
-        ),
+        key=ranking,
         reverse=True,
     ):
         provider = str(s.get("providerId") or s.get("source") or "unknown")[:200]

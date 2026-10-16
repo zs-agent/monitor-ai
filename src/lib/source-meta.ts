@@ -18,6 +18,7 @@ export interface SourceMeta {
 export const SOURCE_META: SourceMeta[] = [
   { id: 'hackernews', name: 'Hacker News', short: 'HN', type: 'Community', desc: 'Top AI-related stories' },
   { id: 'huggingface', name: 'HuggingFace Papers', short: 'HF', type: 'Academic', desc: 'Daily AI papers' },
+  { id: 'huggingface-models', name: 'Hugging Face Models', short: 'HF-M', type: 'Models', desc: 'Public model revisions, tasks and repository metadata' },
   { id: 'github', name: 'GitHub Trending', short: 'GH', type: 'Open Source', desc: 'Trending AI repos' },
   { id: 'semanticscholar', name: 'Semantic Scholar', short: 'S2', type: 'Academic', desc: 'AI research papers' },
   { id: 'rsshub', name: 'RSSHub', short: 'RSS', type: 'News', desc: 'Curated RSS feeds (arXiv, v2ex, zhihu, bilibili)' },

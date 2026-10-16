@@ -1,5 +1,6 @@
 import type { SignalProvider } from './types'
 import { hackernewsProvider } from './hackernews'
+import { huggingfaceModelsProvider } from './huggingface-models'
 import { huggingfaceProvider } from './huggingface'
 import { githubProvider } from './github'
 import { semanticscholarProvider } from './semanticscholar'
@@ -9,6 +10,7 @@ import { rssProvider } from './rss'
 export const providers: SignalProvider[] = [
   hackernewsProvider,
   huggingfaceProvider,
+  huggingfaceModelsProvider,
   githubProvider,
   semanticscholarProvider,
   rssProvider,

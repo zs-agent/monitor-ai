@@ -160,3 +160,8 @@ describe('rss.normalizeRssItem', () => {
     expect(s.language).toBe('zh')
   })
 })
+
+it('同名中英文记录均保留，中文界面不能因去重丢失资料', () => {
+  const records = [makeSignal({ id: 'en', title: 'Same title', language: 'en' }), makeSignal({ id: 'zh', title: 'Same title', language: 'zh' })]
+  expect(applyFilters(mergeSignals([], records, new Set()), 'zh', 'all').map(s => s.id)).toEqual(['zh'])
+})

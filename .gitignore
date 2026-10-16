@@ -21,3 +21,5 @@ research-service/.env
 research-service/outputs/
 research-service/runs/
 research-service/**/__pycache__/
+
+/data/.public-coverage.json

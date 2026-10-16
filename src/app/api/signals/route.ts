@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
   // 惰性启动后台分级轮询（首请求后常驻刷新快照，后续请求基本命中缓存、零网络）
   ensurePollerStarted()
 
-  const outcome = await aggregateSignals(locale, category)
+  const outcome = await aggregateSignals(locale, category, searchParams.get('refresh') === '1')
 
   const body = {
     signals: outcome.signals,

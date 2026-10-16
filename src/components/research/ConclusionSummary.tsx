@@ -4,6 +4,9 @@ import type { Claim, ResearchState } from '@/types/research'
 
 export default function ConclusionSummary({ state }: { state: ResearchState }) {
   const questions = Object.values(state.issues)
+  const notices = Array.from(new Set(state.actions?.flatMap(action => action.retrieval_warnings?.map(warning => warning.reason) || []) || []))
+  if (state.actions?.some(action => action.error_code === 'retrieval_unavailable')) notices.push('部分问题检索暂不可用。已保留其他研究结果，证据不足的问题单独标为待核查。')
+  if (state.run_status === 'failed') notices.unshift('此任务未完成。下方展示已保存的阶段性结果，仍需补充核查；该记录保留在失败记录中。')
   function finding(claim: Claim, carried: boolean, pending: boolean) {
     const supported = !pending && (claim.verification_status || claim.status) === 'supported'
     return <div key={claim.id || claim.text} className="space-y-2">
@@ -40,6 +43,7 @@ export default function ConclusionSummary({ state }: { state: ResearchState }) {
   }
   return <section aria-label="结论与证据链" className="m-3 rounded-lg border border-accent/60 bg-accent-bg p-4 space-y-4">
     <div className="flex justify-between items-center gap-2"><h2 className="text-[16px] font-semibold text-ink">结论与证据链</h2><span className="text-[10px] text-muted">模型辅助核查</span></div>
+    {notices.slice(0, 3).map(notice => <p key={notice} className="text-[12px] leading-6 text-warning">{notice}</p>)}
     {questions.map(question => {
       const primary = question.claims.find(claim => (claim.verification_status || claim.status) === 'supported') || question.claims[0]
       const others = question.claims.filter(claim => claim !== primary)

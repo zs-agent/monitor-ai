@@ -176,4 +176,5 @@ class DataFreshnessTracker {
   }
 }
 
-export const dataFreshness = new DataFreshnessTracker()
+const freshnessStore = globalThis as typeof globalThis & { __monitorDataFreshness?: DataFreshnessTracker }
+export const dataFreshness = freshnessStore.__monitorDataFreshness ??= new DataFreshnessTracker()

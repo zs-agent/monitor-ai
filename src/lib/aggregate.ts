@@ -10,6 +10,7 @@ export interface LocaleSnapshot {
   signals: Signal[]
   fetchedAt: number
   sourceHealth: Record<string, string>
+  ingestionVersion?: number
 }
 
 export interface AggregateOutcome {
@@ -71,7 +72,7 @@ export function mergeSignals(prev: Signal[], fresh: Signal[], refreshedProviderI
   const seen = new Set<string>()
   const out: Signal[] = []
   for (const s of combined) {
-    const k = s.title.toLowerCase().trim()
+    const k = s.language + ':' + s.title.toLowerCase().trim()
     if (!seen.has(k)) { seen.add(k); out.push(s) }
   }
   return out
@@ -82,7 +83,7 @@ export function mergeSignals(prev: Signal[], fresh: Signal[], refreshedProviderI
  * @param providerIds 只刷新这些 provider（缺省为全部）。用于后台分级轮询。
  * 全失败时：有旧快照返回旧快照（stale），否则 throw（由调用方降级 mock）。
  */
-export async function refreshLocale(locale: 'zh' | 'en', providerIds?: string[]): Promise<LocaleSnapshot> {
+export async function refreshLocale(locale: 'zh' | 'en', providerIds?: string[], isCurrent: () => boolean = () => true): Promise<LocaleSnapshot> {
   const targets = providers.filter(p => !providerIds || providerIds.includes(p.id))
   const targetIds = new Set(targets.map(p => p.id))
   const prev = snapshots.get(locale) ?? loadFromDisk()[locale]
@@ -93,6 +94,7 @@ export async function refreshLocale(locale: 'zh' | 'en', providerIds?: string[])
 
   const task = (async (): Promise<LocaleSnapshot> => {
     const results = await Promise.allSettled(targets.map(p => p.fetchSignals(locale)))
+    if (!isCurrent()) throw new Error('Discarded superseded poller refresh')
 
     const freshSignals: Signal[] = []
     const sourceHealth: Record<string, string> = { ...prev?.sourceHealth }
@@ -124,7 +126,7 @@ export async function refreshLocale(locale: 'zh' | 'en', providerIds?: string[])
     for (const [id, health] of Object.entries(latest?.sourceHealth || {})) {
       if (!targetIds.has(id)) sourceHealth[id] = health
     }
-    const snapshot: LocaleSnapshot = { signals: merged, fetchedAt: Date.now(), sourceHealth }
+    const snapshot: LocaleSnapshot = { signals: merged, fetchedAt: Date.now(), sourceHealth, ingestionVersion: 2 }
     snapshots.set(locale, snapshot)
     saveToDisk({ ...loadFromDisk(), [locale]: snapshot })
     return snapshot
@@ -139,11 +141,11 @@ export async function refreshLocale(locale: 'zh' | 'en', providerIds?: string[])
 }
 
 /** 聚合入口：快照新鲜直接返回（零网络），否则触发一次即时全量刷新。 */
-export async function aggregateSignals(locale: 'zh' | 'en', category: string): Promise<AggregateOutcome> {
+export async function aggregateSignals(locale: 'zh' | 'en', category: string, forceRefresh = false): Promise<AggregateOutcome> {
   const now = Date.now()
   let snapshot = snapshots.get(locale) ?? loadFromDisk()[locale]
 
-  if (snapshot && now - snapshot.fetchedAt < CACHE_TTL) {
+  if (snapshot?.ingestionVersion === 2 && now - snapshot.fetchedAt < (forceRefresh ? 15000 : CACHE_TTL)) {
     return {
       signals: applyFilters(snapshot.signals, locale, category),
       fetchedAt: snapshot.fetchedAt,

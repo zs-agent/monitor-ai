@@ -149,7 +149,7 @@ export default function NexusPage() {
     return () => window.clearTimeout(id)
   }, [tab, arenaFocus])
 
-  const load = useCallback((isRefresh = false) => {
+  const load = useCallback((isRefresh = false, forceNetwork = false) => {
     abortRef.current?.abort()
     const ctrl = new AbortController()
     abortRef.current = ctrl
@@ -157,7 +157,7 @@ export default function NexusPage() {
     else setLoading(true)
     setError(null)
 
-    fetch(`/api/signals?locale=${getLocale()}&category=all`, { signal: ctrl.signal })
+    fetch(`/api/signals?locale=${getLocale()}&category=all${forceNetwork ? '&refresh=1' : ''}`, { signal: ctrl.signal })
       .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() as Promise<SignalsResponse> })
       .then(d => {
         if (ctrl.signal.aborted) return
@@ -266,7 +266,7 @@ export default function NexusPage() {
         sourceStates={sourceStates}
         fetchedAt={fetchedAt}
         dataState={loading ? 'loading' : dataState}
-        onRefresh={() => load(true)}
+        onRefresh={() => load(true, true)}
         onSearch={setSearchQuery}
         refreshing={refreshing}
         globalData={globalData}

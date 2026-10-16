@@ -14,8 +14,8 @@ export const huggingfaceProvider: SignalProvider = {
     if (!res.ok) throw new Error(`HF daily_papers HTTP ${res.status}`)
     const data: any[] = await res.json()
 
-    const papers = data.slice(0, 15).map((p: any) => ({
-      id: `hf-${p.id || p.paper?.id || Math.random().toString(36).slice(2)}`,
+    const papers = data.filter(p => p.id || p.paper?.id).slice(0, 100).map((p: any) => ({
+      id: `hf-${p.id || p.paper?.id}`,
       title: p.title || p.paper?.title || '',
       url: `https://huggingface.co/papers/${p.id || p.paper?.id || ''}`,
       upvotes: p.upvotes || p.paper?.upvotes || 0,
@@ -25,10 +25,7 @@ export const huggingfaceProvider: SignalProvider = {
     const signals: Signal[] = []
     for (const paper of papers) {
       try {
-        signals.push(normalizeHFPaper(paper, 'en'))
-        if (locale === 'zh') {
-          signals.push({ ...normalizeHFPaper(paper, 'zh'), id: `${paper.id}-zh`, language: 'zh' })
-        }
+        signals.push(normalizeHFPaper(paper, locale))
       } catch {
         console.warn(`[huggingface] skip malformed paper ${paper?.id}`)
       }

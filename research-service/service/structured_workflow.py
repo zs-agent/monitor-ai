@@ -8,7 +8,7 @@ from typing import TypedDict
 from langgraph.graph import StateGraph, START, END
 from .research_state import action_options, allocate, apply_research, apply_review, evidence_record, render_report, refresh_dependencies, digest
 from .contracts import DOMAIN_CONTRACT, SchedulerConfig
-from .search_gateway import NoEvidenceFound
+from .search_gateway import NoEvidenceFound, RetrievalUnavailable
 from .search_queries import normalize_query
 
 class WorkflowState(TypedDict, total=False):
@@ -24,39 +24,68 @@ class WorkflowState(TypedDict, total=False):
 
 class ResearchAdapter:
     def __init__(self):
+        self._acquired_sources = {}
         self.metrics = dict(search_batches=0, retriever_calls=0, pages_requested=0, model_calls=0, input_tokens=0, output_tokens=0, usage_available=True)
 
-    async def search(self, query):
+    async def search_with_sources(self, query, sources):
+        return await self.search(query, seed_sources=sources)
+
+    async def search(self, query, seed_sources=None):
         from gpt_researcher import GPTResearcher
         from .safe_sources import fetch_source, SourceAccessError
         self.metrics['search_batches'] += 1
         researcher = GPTResearcher(query=query, verbose=False)
         from .search_gateway import search
-        results = await search(query, researcher, self.metrics)
+        search_error = None
+        try:
+            results = await search(query, researcher, self.metrics)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            if not seed_sources:
+                raise
+            search_error, results = exc, []
+        # Interleave matched monitoring records with newly searched sources.
+        # All records still need a successful, validated original-text fetch.
+        seeds = [s for s in (seed_sources or [])[:4] if isinstance(s, dict) and s.get('url')]
+        candidates = []
+        for i in range(max(len(seeds), len(results[:4]))):
+            if i < len(seeds): candidates.append(seeds[i])
+            if i < len(results[:4]): candidates.append(results[i])
         records = []
-        for item in results[:8]:
+        seed_keys = {s.get('key') for s in seeds}
+        for item in candidates:
             if not isinstance(item, dict):
                 continue
             record = evidence_record(item)
+            record['acquisition_origin'] = 'associated_signal' if record['key'] in seed_keys else 'new_search'
             if record['url'] and not any(r['key'] == record['key'] for r in records):
                 records.append(record)
             if len(records) == 4:
                 break
         if not records:
             raise NoEvidenceFound('检索未找到与该问题匹配的资料，暂不能判断；可核对名称或补充来源')
-        self.metrics['pages_requested'] += len(records)
 
+        failed_source_codes = []
         async def acquire(record):
             from urllib.parse import urlsplit
+            cached = self._acquired_sources.get(record['key'])
+            if cached:
+                record.update(deepcopy(cached))
+                record['acquisition_origin'] = 'acquired_this_run'
+                return None
             try:
+                self.metrics['pages_requested'] += 1
                 page = await fetch_source(record['url'])
                 parsed = evidence_record(page)
                 record.update(content=parsed['content'], fetched_at=time.time(), retrieval_level='full_text', link_available=True,
                               final_url=page.get('final_url', record['url']))
+                self._acquired_sources[record['key']] = deepcopy(record)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
                 code = getattr(exc, 'code', 'source_network_error')
+                failed_source_codes.append(code)
                 self.metrics.setdefault('source_rejections', []).append(dict(host=urlsplit(record['url']).hostname, reason=code))
                 self.metrics.setdefault('retrieval_errors', []).append(dict(provider='source_fetch', outcome='failed', error_class=type(exc).__name__, error_code=code))
                 record.update(retrieval_level='snippet', link_available=False)
@@ -65,9 +94,15 @@ class ResearchAdapter:
 
         errors = await asyncio.gather(*(acquire(record) for record in records))
         if not any(record.get('retrieval_level') == 'full_text' for record in records):
+            if search_error:
+                raise search_error
             reasons = list(dict.fromkeys(error for error in errors if error))
+            if failed_source_codes and all(code in {'source_network_error', 'source_http_error', 'source_no_text', 'source_dns_failed', 'proxy_dns_failed'} for code in failed_source_codes):
+                raise RetrievalUnavailable('来源正文暂不可用，暂不能判断：' + '；'.join(reasons[:2]))
             raise SourceAccessError('source_unavailable', '没有取得可核查的资料正文：' + '；'.join(reasons[:2]))
-        return records
+        if search_error:
+            self.metrics.setdefault('retrieval_warnings', []).append(dict(code='associated_source_recovery', reason='在线检索暂不可用；已抓取关联资料原文继续分析，新增资料发现范围受限'))
+        return [record for record in records if record.get('retrieval_level') == 'full_text']
 
     async def generate(self, role, payload):
         from gpt_researcher.config.config import Config
@@ -173,7 +208,7 @@ async def run_structured(task, bus, adapter=None):
         graph['allocation']['spent_units'] = spent
         begin = time.monotonic()
         before_metrics = dict(getattr(adapter, 'metrics', {}))
-        before_lengths = {field: len(before_metrics.get(field, [])) for field in ('retrieval_errors', 'retrieval_attempts', 'source_rejections')}
+        before_lengths = {field: len(before_metrics.get(field, [])) for field in ('retrieval_errors', 'retrieval_attempts', 'source_rejections', 'retrieval_warnings')}
         emit('structured_' + role, issue['question'])
         shared()
         publish_state()
@@ -183,7 +218,12 @@ async def run_structured(task, bus, adapter=None):
                 search_query = normalize_query(graph['focus']) + ' ' + {'identity':'release version', 'capability':'model benchmark capability', 'deployment':'deployment cost', 'ecosystem':'framework repository', 'risk':'security risk'}[issue['axis']] + ' ' + graph.get('time_scope', '')
                 event['search_query'] = search_query.strip()
                 try:
-                    evidence = await adapter.search(search_query)
+                    sources = [graph['evidence'][key] for key in issue['evidence_keys'] if key in graph['evidence']][:4]
+                    event['associated_sources'] = [s['key'] for s in sources]
+                    if hasattr(adapter, 'search_with_sources'):
+                        evidence = await adapter.search_with_sources(search_query, sources)
+                    else:
+                        evidence = await adapter.search(search_query)
                 except NoEvidenceFound:
                     if role == 'research':
                         raise
@@ -243,6 +283,9 @@ async def run_structured(task, bus, adapter=None):
         except Exception as exc:
             issue['status'] = 'unresolved'
             if role == 'research': issue['last_research_failed'] = True
+            issue['pending_reason'] = '本次未能取得足够资料，暂不能判断；可稍后补充检索或提供来源。' if getattr(exc, 'code', '') == 'retrieval_unavailable' else '本次执行发生异常，尚未完成该问题的核查；请查看异常记录。'
+            for claim in issue['claims']:
+                claim.update(status='pending_verification', verification_status='pending_verification', update_status='pending')
             event.update(outcome='failed', error=f'{type(exc).__name__}: {exc}', error_code=getattr(exc, 'code', 'action_failed'))
         finally:
             event['elapsed_sec'] = round(time.monotonic() - begin, 3)
@@ -257,6 +300,7 @@ async def run_structured(task, bus, adapter=None):
                 event[field] = metrics.get(field, 0) - before_metrics.get(field, 0) if event['usage_available'] else None
             event['retrieval_errors'] = list(metrics.get('retrieval_errors', []))[before_lengths['retrieval_errors']:]
             event['retrieval_attempts'] = list(metrics.get('retrieval_attempts', []))[before_lengths['retrieval_attempts']:]
+            event['retrieval_warnings'] = list(metrics.get('retrieval_warnings', []))[before_lengths['retrieval_warnings']:]
             event['source_rejections'] = list(metrics.get('source_rejections', []))[before_lengths['source_rejections']:]
             refresh_dependencies(graph)
             values = shared()
@@ -296,7 +340,7 @@ async def run_structured(task, bus, adapter=None):
         emit('structured_integrate', '整合问题、结论、证据及核查状态')
         from .evaluation import evaluate
         graph['evaluation'] = evaluate(graph)
-        graph['run_status'] = 'failed' if any(a['outcome'] == 'failed' and graph['issues'][a['issue_id']]['status'] not in ('reviewed', 'carried') for a in graph['actions']) else 'partial' if any(q['status'] not in ('reviewed', 'carried') for q in graph['issues'].values()) else 'done'
+        graph['run_status'] = 'failed' if any(a['outcome'] == 'failed' and a.get('error_code') != 'retrieval_unavailable' and graph['issues'][a['issue_id']]['status'] not in ('reviewed', 'carried') for a in graph['actions']) else 'partial' if any(q['status'] not in ('reviewed', 'carried') for q in graph['issues'].values()) else 'done'
         publish_state()
         return dict(research_state=graph, **values)
     def route(state):
@@ -308,7 +352,7 @@ async def run_structured(task, bus, adapter=None):
     for node in ('plan', 'research', 'verify'): workflow.add_conditional_edges(node, route)
     workflow.add_edge('integrate', END)
     final = await workflow.compile().ainvoke(dict(research_state=graph), config={'recursion_limit': 140})
-    failed = any(a['outcome'] == 'failed' and graph['issues'][a['issue_id']]['status'] not in ('reviewed', 'carried') for a in graph['actions'])
+    failed = any(a['outcome'] == 'failed' and a.get('error_code') != 'retrieval_unavailable' and graph['issues'][a['issue_id']]['status'] not in ('reviewed', 'carried') for a in graph['actions'])
     return dict(task_id=task['structured_task_id'], query=task.get('query'), report=None if failed else render_report(graph), structured_state=final['research_state'],
                 elapsed_sec=round(time.monotonic() - started, 1), events=len(bus.events),
                 execution_status='failed' if failed else 'partial' if any(i['status'] in ('pending', 'unresolved', 'draft') for i in graph['issues'].values()) else 'completed')

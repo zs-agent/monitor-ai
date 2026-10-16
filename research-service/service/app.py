@@ -124,7 +124,7 @@ def _build_task(req: ResearchRequest) -> tuple[dict, list[dict]]:
         )
     if req.engine == "structured":
         all_signals = req.snapshot if req.snapshot is not None else sig.load_signals()[0]
-        chosen = sig.select_signals(all_signals, categories=req.categories, top=req.top, min_credibility=0, exclude_providers=())
+        chosen = sig.select_signals(all_signals, categories=req.categories, top=req.top, min_credibility=0, exclude_providers=(), focus=req.query or req.focus)
         task = sig.build_task_from_query(req.focus, model=model, max_sections=req.max_sections, total_words=req.total_words)
         task["signals_detail"] = chosen
         return task, chosen

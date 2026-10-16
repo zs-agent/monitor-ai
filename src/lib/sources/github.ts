@@ -6,7 +6,7 @@ import path from 'node:path'
 import type { SignalProvider } from './types'
 
 const TIMEOUT = 8000
-const PER_PAGE = 10
+const PER_PAGE = 50
 
 function githubHeaders(): Record<string, string> {
   const h: Record<string, string> = {
@@ -41,8 +41,8 @@ async function searchRepos(query: string, perPage: number): Promise<RawGitHubRep
 export async function fetchTrendingRepos(limit = 7): Promise<RawGitHubRepo[]> {
   const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
   const [allTime, recent] = await Promise.allSettled([
-    searchRepos('artificial intelligence OR machine learning OR LLM', PER_PAGE),
-    searchRepos(`AI OR LLM created:>${monthAgo}`, PER_PAGE),
+    searchRepos('topic:artificial-intelligence is:public', PER_PAGE),
+    searchRepos(`topic:llm is:public created:>${monthAgo}`, PER_PAGE),
   ])
 
   const seen = new Set<number>()
@@ -67,7 +67,7 @@ export const githubProvider: SignalProvider = {
   // GitHub API 无 token 仅 60 req/hr，保持低频避免触发限流
   pollIntervalMs: 10 * 60 * 1000,
   async fetchSignals(locale) {
-    const repos = await fetchTrendingRepos(10)
+    const repos = await fetchTrendingRepos(100)
     const signals: Signal[] = []
     for (const repo of repos) {
       try {

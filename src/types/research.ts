@@ -45,5 +45,5 @@ export interface ResearchState {
   affected: string[]; impact_reasons: Record<string, string[]>
   allocation?: { budget_units: number; reserved_units: number; spent_units?: number; proxy_utility: number; selected: Action[]; candidates?: Record<string, Action[]>; deferred?: string[]; defer_reasons?: Record<string, string> }
   dependency_graph?: { Q: string[]; E: string[]; C: Record<string, Claim>; R: { kind: string; source: string; target: string }[] }
-  actions?: { issue_id: string; kind: string; outcome: string; elapsed_sec?: number; input_tokens?: number | null; output_tokens?: number | null; feedback?: boolean; model_calls?: number; search_batches?: number; error?: string }[]
+  actions?: { issue_id: string; kind: string; outcome: string; elapsed_sec?: number; input_tokens?: number | null; output_tokens?: number | null; feedback?: boolean; model_calls?: number; search_batches?: number; error?: string; error_code?: string; associated_sources?: string[]; retrieval_warnings?: { code: string; reason: string }[] }[]
 }

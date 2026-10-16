@@ -11,7 +11,7 @@ export async function fetchLatestPapers(limit = 7): Promise<RawS2Paper[]> {
   const res = await fetchWithTimeout(
     'https://api.semanticscholar.org/graph/v1/paper/search' +
     `?query=large+language+model+artificial+intelligence` +
-    `&year=${thisYear}&limit=10` +
+    `&year=${thisYear}&limit=${Math.min(100, Math.max(1, limit))}` +
     `&fields=title,url,publicationDate,citationCount,authors,tldr`,
     { next: { revalidate: 1800 } },
     TIMEOUT,
@@ -41,7 +41,7 @@ export const semanticscholarProvider: SignalProvider = {
   name: 'Semantic Scholar',
   pollIntervalMs: 10 * 60 * 1000,
   async fetchSignals(locale) {
-    const papers = await fetchLatestPapers(10)
+    const papers = await fetchLatestPapers(100)
     const signals: Signal[] = []
     for (const paper of papers) {
       try {

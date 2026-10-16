@@ -107,3 +107,10 @@ API snapshot固定的是关联输入，后续研究仍在线检索；控制检�
 ```text
 .venv/Scripts/python.exe experiment.py --demo --mode adaptive fixed --alpha 2 4 8 --beta-verify 1 2 --ablation none drop_n drop_t drop_c equal_utility --budget 8 --output runs/demo-matrix
 ```
+
+
+## 检索容错（2026-10-16）
+
+常用检索优先，失败或无结果后自动尝试ModelScope/Gitee公开来源（RESEARCH_DOMESTIC_FALLBACK=modelscope,gitee，留空可禁用以做对照）。正文须经过现有安全抓取与审核；关联标题、摘要和目录总量不作为已确认事实。
+
+普通检索中断保留失败动作与实际消耗，任务输出partial报告，保留已有结论并注明待核查问题；全部来源不可用时不调用模型编造事实。安全拦截、模型或持久化异常仍按failed隔离。详情见../docs/2026-10-16资料关联与检索容错.md。

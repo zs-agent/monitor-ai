@@ -469,7 +469,7 @@ export default function ResearchWorkspace() {
             </div>
           ) : undefined}
         >
-          {report && detail?.structured_state && ['done', 'partial'].includes(detail.status) && <ConclusionSummary key={detail.task_id} state={detail.structured_state} />}
+          {detail?.structured_state && ['done', 'partial', 'failed'].includes(detail.status) && <ConclusionSummary key={detail.task_id} state={detail.structured_state} />}
           {(previewState || detail?.structured_state) && <details open={running || !!previewState || !report} className="mx-3 my-2 rounded border border-edge">
             <summary className="cursor-pointer px-3 py-2 text-[12px] text-muted">{zh ? '研究过程与完整证据记录' : 'Research process and evidence records'}</summary>
             <MechanismView state={(previewState || detail?.structured_state)!} preview={!!previewState} taskId={!previewState && detail?.task_id && ['done', 'partial'].includes(detail.status) ? String(detail.task_id) : undefined} onCorrect={!running ? correctAssociation : undefined} comparisons={demoResults.flatMap((r, i) => r.structured_state ? [{ label: `T${i + 1} · 合成样例`, state: r.structured_state }] : [])} />
