@@ -117,7 +117,7 @@ src/
 
 ## 情报研究（多智能体）
 
-`research-service/` 把 [gpt-researcher](https://github.com/assafelovic/gpt-researcher) 的 LangGraph 多智能体流水线挂到监测信号上：
+`research-service/` 把 LangGraph 多智能体流水线挂到监测信号上：
 **信号 → 研究课题 → 规划章节 / 并行检索 / 评审改写 / 事实核查 / 成稿 → 带引用的中文技术情报报告**。
 
 - 前端入口：`/nexus` 观测中枢 = 多智能体情报工作台，两个页签 **看板 / 情报研究**（URL 直达：`/nexus?tab=dashboard|research`；旧的 `?tab=stream` 会回退到看板）。

@@ -67,7 +67,7 @@ Q 采用稳定ID和修订号，C 保存事实/推断、来源键、证据指纹�
 
 ## 依赖与配置
 
-LangGraph负责显式状态图。GPT Researcher提供quick_search及scraper_manager组件，不在结构化流程中调用ChiefEditor流水线。保留上游来源、许可证和pinned-commit.txt；自研状态、关联、调度、版本、接口及展示层位于service与src目录。安装仍可使用setup.ps1；修改脚本使用Python避免编码问题。
+LangGraph负责显式状态图。上游提供quick_search及scraper_manager组件，不在结构化流程中调用ChiefEditor流水线。保留上游来源、许可证和pinned-commit.txt；自研状态、关联、调度、版本、接口及展示层位于service与src目录。安装仍可使用setup.ps1；修改脚本使用Python避免编码问题。
 
 模型读取 `.env` 的 SMART_LLM，实际调用模型/提供方写入动作日志。STRATEGIC_LLM是历史任务配置的模型名，两者可能不同，以动作记录为准。RETRIEVER控制检索来源；模型Key不进入前端。前端运行于Next.js 15.5.27；Node版本须满足Next依赖声明。
 
