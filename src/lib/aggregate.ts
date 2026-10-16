@@ -53,7 +53,9 @@ function loadFromDisk(): Partial<Record<'zh' | 'en', LocaleSnapshot>> {
 function saveToDisk(all: Partial<Record<'zh' | 'en', LocaleSnapshot>>): void {
   try {
     fs.mkdirSync(SNAPSHOT_DIR, { recursive: true })
-    fs.writeFileSync(SNAPSHOT_FILE, JSON.stringify(all))
+    const temporary = `${SNAPSHOT_FILE}.${process.pid}.tmp`
+    fs.writeFileSync(temporary, JSON.stringify(all))
+    fs.renameSync(temporary, SNAPSHOT_FILE)
   } catch (e) {
     console.warn(`[aggregate] failed to persist snapshot: ${(e as Error)?.message}`)
   }
@@ -69,7 +71,7 @@ export function mergeSignals(prev: Signal[], fresh: Signal[], refreshedProviderI
   const seen = new Set<string>()
   const out: Signal[] = []
   for (const s of combined) {
-    const k = s.title.toLowerCase().slice(0, 40)
+    const k = s.title.toLowerCase().trim()
     if (!seen.has(k)) { seen.add(k); out.push(s) }
   }
   return out
@@ -94,6 +96,7 @@ export async function refreshLocale(locale: 'zh' | 'en', providerIds?: string[])
 
     const freshSignals: Signal[] = []
     const sourceHealth: Record<string, string> = { ...prev?.sourceHealth }
+    const succeededIds = new Set<string>()
     let okCount = 0
     for (let i = 0; i < targets.length; i++) {
       const p = targets[i]
@@ -102,6 +105,7 @@ export async function refreshLocale(locale: 'zh' | 'en', providerIds?: string[])
         freshSignals.push(...r.value)
         sourceHealth[p.id] = 'ok'
         dataFreshness.recordUpdate(p.id, r.value.length)
+        succeededIds.add(p.id)
         okCount++
       } else {
         sourceHealth[p.id] = 'error'
@@ -110,11 +114,16 @@ export async function refreshLocale(locale: 'zh' | 'en', providerIds?: string[])
     }
 
     if (okCount === 0) {
-      if (prev) return prev // 全部失败：保留旧快照，调用方标记 stale
+      // Throw so aggregateSignals truthfully marks the previous data stale.
+      if (prev) throw new Error("All providers failed; snapshot retained")
       throw new Error('All providers failed')
     }
 
-    const merged = mergeSignals(prev?.signals ?? [], freshSignals, targetIds)
+    const latest = snapshots.get(locale) ?? prev
+    const merged = mergeSignals(latest?.signals ?? [], freshSignals, succeededIds)
+    for (const [id, health] of Object.entries(latest?.sourceHealth || {})) {
+      if (!targetIds.has(id)) sourceHealth[id] = health
+    }
     const snapshot: LocaleSnapshot = { signals: merged, fetchedAt: Date.now(), sourceHealth }
     snapshots.set(locale, snapshot)
     saveToDisk({ ...loadFromDisk(), [locale]: snapshot })

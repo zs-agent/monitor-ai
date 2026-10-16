@@ -71,6 +71,17 @@ describe('aggregate.mergeSignals（分级轮询合并）', () => {
 })
 
 describe('insights.buildCategory（无 LLM key 时）', () => {
+  it('资料全部移除时清空旧洞察，不能把旧文本当作新结果', async () => {
+    const result = await buildCategory('models', [], { category: 'models', text: 'obsolete finding', basedOnSignalIds: ['old'], generatedAt: '2026-01-01', coveredCount: 1 })
+    expect(result.text).toBe('')
+    expect(result.coveredCount).toBe(0)
+    expect(result.stale).toBe(false)
+  })
+  it('只移除资料时，无法重新生成也必须标为过期', async () => {
+    const result = await buildCategory('models', [makeSignal({ id: 'a' })], { category: 'models', text: 'older scope', basedOnSignalIds: ['a', 'b'], generatedAt: '2026-01-01', coveredCount: 2 })
+    expect(result.stale).toBe(true)
+    expect(result.generatedAt).toBe('2026-01-01')
+  })
   it('无新增信号 → 复用旧文本，不触发 LLM', async () => {
     const prev = {
       category: 'models' as const,

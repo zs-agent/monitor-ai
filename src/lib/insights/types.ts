@@ -6,6 +6,8 @@ export interface CategoryInsight {
   text: string
   /** 生成时基于的信号 id 集合，用于增量判断 */
   basedOnSignalIds: string[]
+  inputFingerprint?: string
+  stale?: boolean
   generatedAt: string
   /** 生成时覆盖的信号数（用于前端展示"基于 N 条信号"） */
   coveredCount: number

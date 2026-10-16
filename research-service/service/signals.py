@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 
 SERVICE_ROOT = Path(__file__).resolve().parents[1]
@@ -32,9 +33,15 @@ DEFAULT_GUIDELINES = [
 
 def load_signals(path: str | Path = DEFAULT_SNAPSHOT, locale: str = "zh"):
     """读快照，返回 (signals, fetchedAt)。locale 缺失时退回第一个可用语言块。"""
+    if not Path(path).is_file():
+        return [], None
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
-    block = payload.get(locale) or next(iter(payload.values()))
-    return block.get("signals", []), block.get("fetchedAt")
+    if not isinstance(payload, dict):
+        raise ValueError("snapshot must be an object")
+    block = payload.get(locale) or next((b for b in payload.values() if isinstance(b, dict) and isinstance(b.get("signals"), list)), {})
+    if not isinstance(block, dict) or not isinstance(block.get("signals", []), list):
+        raise ValueError("snapshot signals must be an array")
+    return [s for s in block.get("signals", []) if isinstance(s, dict)], block.get("fetchedAt")
 
 
 def select_signals(
@@ -52,24 +59,30 @@ def select_signals(
     - 单来源配额（max_per_provider）：不设限时 Hacker News 的 importance 会挤掉全部论文/
       产业信号，情报面过窄；配额保证"新闻 + 学术 + 产业"混合。
     """
+    def number(value):
+        try:
+            parsed = float(value or 0)
+            return parsed if math.isfinite(parsed) else 0.0
+        except (ValueError, TypeError):
+            return 0.0
     picked: list[dict] = []
     per_provider: dict[str, int] = {}
     for s in sorted(
         (
             s
             for s in signals
-            if s.get("credibility", 0) >= min_credibility
+            if isinstance(s, dict) and number(s.get("credibility")) >= min_credibility
             and s.get("providerId") not in exclude_providers
             and (not categories or s.get("category") in categories)
         ),
         key=lambda s: (
-            s.get("importance", 0),
-            s.get("sourcesCount", 0),
-            s.get("credibility", 0),
+            number(s.get("importance")),
+            number(s.get("sourcesCount")),
+            number(s.get("credibility")),
         ),
         reverse=True,
     ):
-        provider = s.get("providerId") or s.get("source") or "unknown"
+        provider = str(s.get("providerId") or s.get("source") or "unknown")[:200]
         if per_provider.get(provider, 0) >= max_per_provider:
             continue
         per_provider[provider] = per_provider.get(provider, 0) + 1

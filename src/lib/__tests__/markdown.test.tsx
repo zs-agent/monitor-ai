@@ -9,6 +9,11 @@ function html(source: string): string {
 }
 
 describe('renderMarkdown', () => {
+  it('模型生成的非HTTP链接不具有可执行href', () => {
+    expect(html('[恶意](javascript:alert)')).not.toContain('href=')
+    expect(html('[恶意](data:text/html,x)')).not.toContain('href=')
+    expect(html('[来源](https://example.com)')).toContain('href="https://example.com"')
+  })
   it('渲染多级标题', () => {
     const out = html('# 一级\n\n## 二级\n\n### 三级')
     expect(out).toContain('一级')

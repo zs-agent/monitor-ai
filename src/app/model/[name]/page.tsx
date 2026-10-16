@@ -2,12 +2,14 @@
 
 import { useParams, useRouter } from 'next/navigation'
 import { LEADERBOARD_INTL, LEADERBOARD_CN, type LeaderboardEntry } from '@/data/leaderboard'
-import { mockSignals } from '@/data/mock-signals'
+import { useRemoteData } from '@/lib/use-remote-data'
+import type { Signal } from '@/types/signal'
 import { useState, useEffect, useMemo } from 'react'
 import { getLocale, type Locale } from '@/lib/i18n'
 
 function findModel(name: string): LeaderboardEntry | undefined {
-  const decoded = decodeURIComponent(name)
+  // useParams already decodes route segments; decoding again can throw on '%'.
+  const decoded = name
   return LEADERBOARD_INTL.find(m => m.model === decoded) || LEADERBOARD_CN.find(m => m.model === decoded)
 }
 
@@ -16,6 +18,7 @@ export default function ModelDetailPage() {
   const router = useRouter()
   const [locale, setLocale] = useState<Locale>('en')
   const name = typeof params.name === 'string' ? params.name : ''
+  const { data: signalData } = useRemoteData<{ signals?: Signal[] }>(`/api/signals?locale=${locale}&category=all`)
 
   useEffect(() => {
     setLocale(getLocale())
@@ -25,13 +28,13 @@ export default function ModelDetailPage() {
   const relatedSignals = useMemo(() => {
     if (!model) return []
     const keywords = model.model.toLowerCase().split(/[\s()]/).filter(Boolean)
-    return mockSignals
+    return (signalData?.signals || [])
       .filter(s => {
         const text = `${s.title} ${s.summary} ${s.tags.join(' ')}`.toLowerCase()
         return keywords.some(kw => kw.length > 2 && text.includes(kw))
       })
       .slice(0, 5)
-  }, [model])
+  }, [model, signalData])
   if (!model) {
     return (
       <div className="min-h-screen bg-base flex items-center justify-center text-muted">
@@ -60,6 +63,7 @@ export default function ModelDetailPage() {
       </nav>
 
       <main className="flex-1 max-w-3xl mx-auto w-full p-6 space-y-6">
+        <p className="text-[11px] text-muted">{locale === 'zh' ? '模型档案与指标为预置资料快照；关联动态来自当前监测资料，不代表实时模型测评。' : 'Model metrics are reference snapshots; related signals come from current monitoring, not a live model evaluation.'}</p>
         {/* Hero */}
         <div className="bg-card border border-edge rounded-xl p-6">
           <div className="flex items-start justify-between">

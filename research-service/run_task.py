@@ -1,111 +1,80 @@
-"""按 monitor-ai 的信号跑一次多智能体技术情报研究（不需要启动 HTTP 服务）。
-
-用法（在 research-service 目录下）：
-  .venv/Scripts/python.exe run_task.py --signals-only                 # 只看挑出来的信号
-  .venv/Scripts/python.exe run_task.py --focus "AI 智能体编排框架" --top 10
-  .venv/Scripts/python.exe run_task.py --query "固态电池产业化进展"    # 不依赖信号，调试/对照组用
-"""
+"""Run the owned structured workflow; --engine legacy is explicit compatibility."""
 from __future__ import annotations
-
 import argparse
 import asyncio
+import contextlib
+import io
 import json
-import sys
-from pathlib import Path
+import time
 
-SERVICE_ROOT = Path(__file__).resolve().parent
-sys.path.insert(0, str(SERVICE_ROOT))
-
-from service import signals as sig  # noqa: E402
-from service.runner import EventBus, default_model, run_task, save_run  # noqa: E402
-
-
-def _parse_categories(raw: str | None) -> list[str] | None:
-    if not raw:
-        return None
-    return [c.strip() for c in raw.split(",") if c.strip()]
-
-
-async def _run(args) -> int:
-    model = default_model()
-    categories = _parse_categories(args.categories)
-
-    if args.query:
-        task = sig.build_task_from_query(
-            args.query, model=model, max_sections=args.max_sections, total_words=args.total_words
-        )
-        chosen: list[dict] = []
-    else:
-        all_signals, fetched_at = sig.load_signals(args.snapshot)
-        chosen = sig.select_signals(all_signals, categories=categories, top=args.top)
-        task = sig.build_task_from_signals(
-            chosen, focus=args.focus, model=model, max_sections=args.max_sections, total_words=args.total_words
-        )
-        if not args.json:
-            import datetime as _dt
-
-            stamp = _dt.datetime.fromtimestamp((fetched_at or 0) / 1000).strftime("%Y-%m-%d %H:%M")
-            print(f"# 信号快照时间 {stamp}，选中 {len(chosen)}/{len(all_signals)} 条（model={model}）")
-            for s in chosen:
-                print(f"  · [{s.get('credibility')}/5] {s.get('title')}  <{s.get('source')}>")
-
+async def run(args):
+    from service import signals as sig
+    from service.app import ResearchRequest, _prepare_request
+    from service.runner import EventBus, run_task, save_run
+    from service.structured_workflow import run_structured
+    snapshot = sig.load_signals(args.snapshot)[0]
+    request = ResearchRequest(engine=args.engine,focus=args.focus,query=args.query, snapshot=snapshot,
+                              categories=args.categories.split(',') if args.categories else None,
+                              top=args.top,max_sections=args.max_sections,total_words=args.total_words,
+                              task_type=args.task_type,action_budget=args.action_budget,scheduler_mode=args.mode,
+                              association_mode=args.association_mode,time_scope=args.time_scope,parent_task_id=args.parent_task_id)
+    task,chosen=await _prepare_request(request)
+    task['structured_task_id']=str(time.time_ns())
+    task['signals_used']=[s.get('id') for s in chosen]
     if args.signals_only:
-        return 0
-
-    bus = EventBus()
-    queue = bus.subscribe()
-
-    async def printer() -> None:
+        return 0,dict(signals=chosen,research_policy=task['research_policy'],structured_state=task.get('structured_state'))
+    bus=EventBus()
+    queue=bus.subscribe()
+    async def printer():
         while True:
-            ev = await queue.get()
-            line = f"[{ev.get('event') or ev.get('type')}] {ev.get('output', '')}"
-            print(line[:400], flush=True)
-
-    printer_task = asyncio.create_task(printer())
+            event=await queue.get()
+            if not args.json: print(f"[{event.get('event')}] {event.get('output','')}"[:400],flush=True)
+    job=asyncio.create_task(printer())
+    started=time.monotonic()
+    error=None
     try:
-        result = await run_task(task, bus=bus)
+        result=await (run_structured(task,bus) if args.engine=='structured' else run_task(task,bus=bus))
+        status='failed' if result.get('execution_status')=='failed' else 'partial' if result.get('execution_status')=='partial' else 'done' if result.get('report') else 'failed'
+    except (Exception,asyncio.CancelledError) as exc:
+        error=f'{type(exc).__name__}: {exc}'
+        status='cancelled' if isinstance(exc,asyncio.CancelledError) else 'failed'
+        result=dict(task_id=task['structured_task_id'],query=task['query'],structured_state=task.get('structured_state'),elapsed_sec=round(time.monotonic()-started,1))
     finally:
-        printer_task.cancel()
+        job.cancel()
+        with contextlib.suppress(asyncio.CancelledError): await job
+        bus.unsubscribe(queue)
+    if result.get('structured_state'):
+        result['structured_state']['run_status'] = status
+    path=save_run(task,result,bus.events,status=status,error=error)
+    payload={k:v for k,v in result.items() if k!='report'}
+    payload.update(status=status,error=error,record_path=str(path) if path else None,report_preview=(result.get('report') or '')[:400])
+    return (0 if status in ('done','partial') else 1),payload
 
-    # 落盘（runs/<task_id>.json 保存上游原文；runs/<task_id>.md 用展示层规范化后的标题）
-    record_path = save_run(
-        task,
-        result,
-        bus.events,
-        status="done" if result.get("report") else "error",
-        error=None if result.get("report") else "运行结束但没有产出报告（检查模型 key 与检索器可达性）",
-    )
-    if record_path:
-        result["record_path"] = str(record_path)
+def main():
+    parser=argparse.ArgumentParser(description='结构化多智能体技术情报研究')
+    parser.add_argument('--engine',choices=['structured','legacy'],default='structured')
+    parser.add_argument('--focus',default='AI 领域近期技术动向')
+    parser.add_argument('--query')
+    parser.add_argument('--task-type',choices=['fact_check','object_comparison','dynamic_analysis','risk_assessment'])
+    parser.add_argument('--action-budget',type=int,default=6)
+    parser.add_argument('--mode',choices=['adaptive','fixed','single','full'],default='adaptive')
+    parser.add_argument('--association-mode',choices=['structured','unfiltered','keyword','semantic'],default='structured')
+    parser.add_argument('--time-scope',default='')
+    parser.add_argument('--parent-task-id')
+    parser.add_argument('--categories')
+    parser.add_argument('--top',type=int,default=10)
+    parser.add_argument('--max-sections',type=int,default=3)
+    parser.add_argument('--total-words',type=int,default=1500)
+    parser.add_argument('--snapshot',default='../data/signals-snapshot.json')
+    parser.add_argument('--signals-only',action='store_true')
+    parser.add_argument('--json',action='store_true')
+    args=parser.parse_args()
+    try:
+        with contextlib.redirect_stdout(io.StringIO()) if args.json else contextlib.nullcontext():
+            code,payload=asyncio.run(run(args))
+    except Exception as exc:
+        code,payload=1,dict(error=str(getattr(exc,'detail',None) or exc))
+    print(json.dumps(payload,ensure_ascii=False,indent=2))
+    return code
 
-    payload = {
-        k: v for k, v in result.items() if k != "report"
-    } | {"report_preview": (result.get("report") or "")[:400]}
-    print(json.dumps(payload, ensure_ascii=False, indent=2))
-    return 0 if result.get("report") else 1
-
-
-def main() -> int:
-    ap = argparse.ArgumentParser(description="信号驱动的多智能体技术情报研究")
-    ap.add_argument("--focus", default="AI 领域近期技术动向")
-    ap.add_argument("--query", default=None, help="直接给研究问题（跳过信号）")
-    ap.add_argument("--categories", default=None, help="逗号分隔：models,products,industry,papers,tips")
-    ap.add_argument("--top", type=int, default=10, help="最多挑多少条信号")
-    ap.add_argument("--max-sections", type=int, default=3)
-    ap.add_argument("--total-words", type=int, default=1500)
-    ap.add_argument("--snapshot", default=str(sig.DEFAULT_SNAPSHOT))
-    ap.add_argument("--signals-only", action="store_true", help="只打印选中的信号，不调用模型")
-    ap.add_argument("--json", action="store_true", help="静默协作日志，只输出最终 JSON")
-    args = ap.parse_args()
-
-    if args.json:
-        import contextlib
-        import io
-
-        with contextlib.redirect_stdout(io.StringIO()):
-            return asyncio.run(_run(args))
-    return asyncio.run(_run(args))
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+if __name__=='__main__': raise SystemExit(main())

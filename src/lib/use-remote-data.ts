@@ -41,6 +41,7 @@ export function useRemoteData<T>(
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
+  const fetchingRef = useRef(false)
   const dataRef = useRef<T | null>(null)
   dataRef.current = data
   const urlRef = useRef(url)
@@ -53,10 +54,12 @@ export function useRemoteData<T>(
     abortRef.current?.abort()
     const ctrl = new AbortController()
     abortRef.current = ctrl
+    fetchingRef.current = true
     if (force) setRefreshing(true)
     else if (!dataRef.current) setLoading(true)
     setError(null)
 
+    const timer = setTimeout(() => ctrl.abort("timeout"), 20000)
     fetch(urlRef.current, { signal: ctrl.signal })
       .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return parseRef.current(r) })
       .then(d => {
@@ -66,32 +69,33 @@ export function useRemoteData<T>(
         setRefreshing(false)
       })
       .catch(e => {
-        if (e.name === 'AbortError') return
-        setError((e as Error).message)
+        if (abortRef.current !== ctrl) return
+        if (ctrl.signal.aborted && ctrl.signal.reason !== 'timeout') return
+        setError(ctrl.signal.reason === 'timeout' ? '请求超时，请重试' : (e as Error).message)
         setLoading(false)
         setRefreshing(false)
-      })
+      }).finally(() => { clearTimeout(timer); if (abortRef.current === ctrl) fetchingRef.current = false })
   }, [])
 
   const reload = useCallback((force = false) => run(force), [run])
 
   useEffect(() => {
-    if (opts.enabled === false) return
+    if (opts.enabled === false) { setLoading(false); setRefreshing(false); return }
     run()
     return () => abortRef.current?.abort()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [run, url, ...deps])
+  }, [run, url, opts.enabled, ...deps])
 
   // 自动轮询：标签页隐藏时暂停，恢复可见后立即刷新一次
   useEffect(() => {
     const ms = opts.refreshInterval
-    if (!ms) return
-    const poll = () => { if (!document.hidden) run(true) }
+    if (!ms || opts.enabled === false) return
+    const poll = () => { if (!document.hidden && !fetchingRef.current) run(true) }
     const id = setInterval(poll, ms)
     document.addEventListener('visibilitychange', poll)
     return () => { clearInterval(id); document.removeEventListener('visibilitychange', poll) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [run, opts.refreshInterval])
+  }, [run, opts.refreshInterval, opts.enabled])
 
   return { data, setData, loading, refreshing, error, reload }
 }

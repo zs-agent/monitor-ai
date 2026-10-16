@@ -19,7 +19,7 @@ from dotenv import load_dotenv
 
 SERVICE_ROOT = Path(__file__).resolve().parents[1]
 VENDOR_ROOT = SERVICE_ROOT / "gpt-researcher"
-RUNS_DIR = SERVICE_ROOT / "runs"
+RUNS_DIR = Path(os.environ.get('RESEARCH_RUNS_DIR') or SERVICE_ROOT / "runs")
 
 if not (VENDOR_ROOT / "multi_agents").is_dir():
     raise RuntimeError(f"未找到上游仓库 {VENDOR_ROOT}，先运行 setup.ps1")
@@ -32,6 +32,7 @@ from gpt_researcher.utils.enum import Tone  # noqa: E402
 from multi_agents.agents import ChiefEditorAgent  # noqa: E402
 
 from .postprocess import normalize_report_labels  # noqa: E402
+from .contracts import RunStatus
 
 
 def default_model() -> str:
@@ -51,15 +52,23 @@ class EventBus:
         self._subscribers: set[asyncio.Queue] = set()
 
     def publish(self, event: dict) -> None:
+        event = dict(event)
         event.setdefault("ts", time.time())
+        event.setdefault("sequence", (self.events[-1].get("sequence", 0) if self.events else 0) + 1)
+        if event.get('event') == 'shared_state':
+            # Keep one full-state projection for replay; action logs already
+            # preserve transitions. Do not retain O(actions * source text).
+            self.events[:] = [past for past in self.events if past.get('event') != 'shared_state']
         self.events.append(event)
         if len(self.events) > self._keep:
             del self.events[: len(self.events) - self._keep]
         for q in list(self._subscribers):
+            if q.full():
+                q.get_nowait()
             q.put_nowait(event)
 
     def subscribe(self) -> asyncio.Queue:
-        q: asyncio.Queue = asyncio.Queue()
+        q: asyncio.Queue = asyncio.Queue(maxsize=min(self._keep, 128))
         self._subscribers.add(q)
         return q
 
@@ -114,7 +123,8 @@ async def run_task(task: dict, *, bus: EventBus | None = None, tone: Tone = Tone
 
     state = state if isinstance(state, dict) else {}
     result = {
-        "task_id": chief.task_id,
+        "task_id": task.get("structured_task_id") or str(chief.task_id),
+        "upstream_task_id": str(chief.task_id),
         "query": task.get("query"),
         "output_dir": str(chief.output_dir),
         "report": state.get("report"),
@@ -123,7 +133,7 @@ async def run_task(task: dict, *, bus: EventBus | None = None, tone: Tone = Tone
         "elapsed_sec": round(elapsed, 1),
         "events": len(bus.events),
     }
-    bus.publish({"type": "run", "event": "finished", "output": f"{elapsed:.1f}s, {len(bus.events)} events"})
+    # HTTP orchestrator publishes terminal event after saving the result.
     return result
 
 
@@ -143,7 +153,13 @@ def save_run(
     task_id = result.get("task_id")
     if not task_id:
         return None
-    RUNS_DIR.mkdir(exist_ok=True)
+    status = RunStatus('failed' if status == 'error' else status).value
+    folder = RUNS_DIR / 'demos' if task.get('storage_group') == 'demos' else RUNS_DIR
+    folder.mkdir(exist_ok=True, parents=True)
+    event_log = list(events)
+    if status != "running" and not any(e.get("event") in ("finished", "failed", "cancelled") for e in event_log):
+        event_log.append(dict(type="run", event="cancelled" if status == "cancelled" else "failed" if status in ("error", 'failed') else "finished",
+                              output=error or status, ts=time.time(), sequence=(event_log[-1].get("sequence", 0) if event_log else 0) + 1))
     payload = {
         "task_id": task_id,
         "focus": task.get("focus"),
@@ -153,22 +169,41 @@ def save_run(
         "signals_used": task.get("signals_used", []),
         "signals_detail": task.get("signals_detail", []),
         "research_policy": task.get("research_policy"),
+        "engine": task.get("engine", "legacy"),
+        "data_mode": task.get('data_mode', 'live'),
+        "structured_state": result.get("structured_state") or task.get("structured_state"),
+        "execution_status": result.get("execution_status"),
         "parent_task_id": (task.get("research_policy") or {}).get("parent_task_id"),
-        "status": status,
+        "status": 'failed' if status == 'error' else status,
         "error": error,
         "elapsed_sec": result.get("elapsed_sec"),
         "output_dir": result.get("output_dir"),
-        "report": result.get("report"),
+        "report": result.get("report") if status in ('done', 'partial') else None,
         "diagrams": result.get("diagrams") or [],
-        "events": events,
+        "events": event_log,
         "created_at": created_at or time.time(),
         "finished_at": time.time(),
     }
-    path = RUNS_DIR / f"{task_id}.json"
-    path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    if not str(task_id).isdigit():
+        raise ValueError("task_id must contain only digits")
+    path = folder / f"{task_id}.json"
+    temporary = path.with_suffix(".json.tmp")
+    temporary.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
     # 给人读的 Markdown 用展示层规范化后的标题（JSON 里保留上游原文，便于追溯）
-    if result.get("report"):
-        (RUNS_DIR / f"{task_id}.md").write_text(normalize_report_labels(result["report"]) or "", encoding="utf-8")
+    if payload.get("report"):
+        markdown = result["report"] if task.get("engine") == "structured" else normalize_report_labels(result["report"])
+        (folder / f"{task_id}.md").write_text(markdown or "", encoding="utf-8")
+    state = payload.get("structured_state") or {}
+    if state.get("experiment"):
+        folder = folder / "experiments"
+        folder.mkdir(exist_ok=True)
+        log = dict(state["experiment"], task_id=str(task_id), status=status, parent_task_id=payload["parent_task_id"], actions=state.get("actions", []), allocation=state.get("allocation"), delta=state.get("delta"), affected=state.get("affected"))
+        temp = folder / f"{task_id}.json.tmp"
+        temp.write_text(json.dumps(log, ensure_ascii=False), encoding="utf-8")
+        os.replace(temp, folder / f"{task_id}.json")
+    # Commit the primary record only after all ancillary writes succeeded.
+    # A failed save must not leave a completed report in the normal library.
+    os.replace(temporary, path)
     return path
 
 
@@ -185,6 +220,13 @@ def load_history(limit: int = 40) -> list[dict]:
             data = json.loads(path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
             continue  # 半截文件（正在写）直接跳过
+        if not isinstance(data, dict):
+            continue
+        if data.get('status') == 'error':
+            data['status'] = 'failed'
+        if data.get('status') == 'failed' and data.get('error') == '所有已执行研究动作均失败；请查看异常及消耗记录':
+            from .errors import failure_summary
+            data['error'] = failure_summary(data.get('structured_state') or {})
         items.append(
             {
                 "task_id": data.get("task_id"),
@@ -208,8 +250,28 @@ def load_run(task_id: str) -> dict | None:
         return None  # 只接受数字 task_id，避免路径穿越
     path = RUNS_DIR / f"{normalized}.json"
     if not path.is_file():
+        path = RUNS_DIR / 'demos' / f'{normalized}.json'
+    if not path.is_file():
         return None
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        record = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(record, dict):
+            return None
+        if record.get('status') == 'error': record['status'] = 'failed'
+        if record.get('status') == 'failed' and record.get('error') == '所有已执行研究动作均失败；请查看异常及消耗记录':
+            from .errors import failure_summary
+            record['error'] = failure_summary(record.get('structured_state') or {})
+        return record
     except (json.JSONDecodeError, OSError):
         return None
+
+
+def update_record(task_id, record):
+    if not str(task_id).isdigit():
+        raise ValueError('invalid task id')
+    path = RUNS_DIR / f'{task_id}.json'
+    if not path.is_file(): path = RUNS_DIR / 'demos' / f'{task_id}.json'
+    if not path.is_file(): raise FileNotFoundError('run not found')
+    temporary = path.with_suffix('.review.tmp')
+    temporary.write_text(json.dumps(record, ensure_ascii=False), encoding='utf-8')
+    os.replace(temporary, path)

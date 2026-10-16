@@ -1,12 +1,13 @@
 'use client'
 
 import type { Locale } from '@/lib/i18n'
+import type { RunStatus } from '@/types/research-contracts'
 
 export interface RunSummary {
-  task_id?: number | null
+  task_id?: number | string | null
   run_id?: string
   focus?: string | null
-  status?: string
+  status?: RunStatus
   model?: string
   elapsed_sec?: number | null
   created_at?: number | null
@@ -27,8 +28,10 @@ function when(ts?: number | null): string {
 const STATUS_STYLE: Record<string, { dot: string; zh: string; en: string }> = {
   running: { dot: 'bg-accent animate-pulse-slow', zh: '研究中', en: 'running' },
   done: { dot: 'bg-emerald-400', zh: '已完成', en: 'done' },
+  partial: { dot: 'bg-amber-400', zh: '部分完成，待核查', en: 'partial, needs review' },
   cancelled: { dot: 'bg-slate-400', zh: '已取消', en: 'cancelled' },
   error: { dot: 'bg-red-400', zh: '失败', en: 'failed' },
+  failed: { dot: 'bg-red-400', zh: '失败 · 不进入报告对照', en: 'failed · excluded from comparisons' },
 }
 
 interface Props {
@@ -55,7 +58,7 @@ export default function HistoryList({ locale, items, activeKey, onSelect }: Prop
     <ul className="flex-1 min-h-0 overflow-y-auto">
       {items.map(item => {
         const key = item.run_id || String(item.task_id)
-        const st = STATUS_STYLE[item.status || 'done'] || STATUS_STYLE.done
+        const st = STATUS_STYLE[item.status || 'error'] || STATUS_STYLE.error
         const active = activeKey === key
         return (
           <li key={key}>

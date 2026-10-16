@@ -14,7 +14,11 @@ POLICY_VERSION = "evolution-v1"
 
 def canonical_url(value):
     try:
+        if len(str(value or "")) > 2048:
+            return ""
         parts = urlsplit(str(value or ""))
+        if parts.username or parts.password:
+            return ""
         if parts.scheme.lower() not in ("http", "https") or not parts.netloc:
             return ""
         query = sorted((k, v) for k, v in parse_qsl(parts.query)

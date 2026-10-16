@@ -12,6 +12,13 @@ interface AgentMeta {
 }
 
 const AGENTS: Record<string, AgentMeta> = {
+  structured_plan: { tone: "chief", zh: "规划 · 安排研究", en: "Planning" },
+  structured_research: { tone: "researcher", zh: "研究 · 查找资料", en: "Research" },
+  structured_review: { tone: "fact", zh: "审核 · 核对依据", en: "Verification" },
+  structured_integrate: { tone: "writer", zh: "整合 · 生成报告", en: "Integration" },
+  structured_progress: { tone: "system", zh: "动作完成 · 预算记账", en: "Budget ledger" },
+  structured_feedback: { tone: 'reviewer', zh: '审核反馈 · 预算内回边', en: 'Budgeted feedback loop' },
+  cancelled: { tone: "system", zh: "系统 · 已取消", en: "Cancelled" },
   starting_research: { tone: 'chief', zh: '主编 · 启动', en: 'Chief Editor · start' },
   planning_research: { tone: 'chief', zh: '主编 · 拆解子问题', en: 'Chief Editor · planning' },
   parallel_research: { tone: 'chief', zh: '主编 · 并行分派章节', en: 'Chief Editor · dispatch' },
@@ -55,6 +62,7 @@ const TONE_DOT: Record<AgentTone, string> = {
 
 /** 关键节点：只看阶段推进，过滤掉逐条抓取/子查询噪声 */
 export const KEY_EVENTS: Record<string, true> = {
+  structured_plan: true, structured_research: true, structured_review: true, structured_integrate: true, structured_feedback: true, cancelled: true,
   started: true,
   starting_research: true,
   planning_research: true,

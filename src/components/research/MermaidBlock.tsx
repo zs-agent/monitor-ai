@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import type { Mermaid } from 'mermaid'
 
 // visualizer 智能体会在报告里塞一段 mermaid 代码块，这里把它真正画成图。
@@ -31,7 +31,7 @@ export default function MermaidBlock({ code }: { code: string }) {
   const [theme, setTheme] = useState('dark')
   const seq = useRef(0)
   // 同一页面可能有多张图，render 的 id 必须唯一
-  const uid = useMemo(() => `mmd-${Math.random().toString(36).slice(2, 9)}`, [])
+  const uid = `mmd-${useId().replace(/:/g, '')}`
 
   useEffect(() => {
     const el = document.documentElement
@@ -46,6 +46,11 @@ export default function MermaidBlock({ code }: { code: string }) {
     const id = seq.current++
     let cancelled = false
     setFailed('')
+    setSvg('')
+    if (code.length > 20000) {
+      setFailed('图示内容超过渲染上限')
+      return
+    }
     loadMermaid(theme)
       .then(m => m.render(`${uid}-${id}`, code))
       .then(({ svg: rendered }) => { if (!cancelled) setSvg(rendered) })

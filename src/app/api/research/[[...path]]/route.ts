@@ -15,6 +15,8 @@ export const dynamic = 'force-dynamic'
 const BASE = (process.env.RESEARCH_SERVICE_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
 
 function upstreamPath(segments: string[]): string {
+  if (['contracts', 'demo', 'experiments'].includes(segments[0])) return `/research/${segments.map(encodeURIComponent).join('/')}`
+  if (segments[0] === 'preview') return '/research/preview'
   if (segments[0] === 'health') return '/health'
   if (segments[0] === 'run') return `/research${segments.slice(1).map(s => `/${s}`).join('')}`
   if (segments[0] === 'history') return `/research/history${segments.slice(1).map(s => `/${s}`).join('')}`
@@ -22,10 +24,24 @@ function upstreamPath(segments: string[]): string {
   return `/${segments.join('/')}`
 }
 
-async function handler(request: NextRequest, { params }: { params: { path?: string[] } }) {
-  const segments = params.path || []
+async function handler(request: NextRequest, { params }: { params: Promise<{ path?: string[] }> }) {
+  const segments = (await params).path || []
+  if (!['health', 'run', 'history', 'preview', 'intel', 'contracts', 'demo', 'experiments'].includes(segments[0] || '')) {
+    return NextResponse.json({ error: 'Unknown research endpoint' }, { status: 404 })
+  }
+  if (request.method === 'POST') {
+    const origin = request.headers.get('origin')
+    try {
+      if (origin && new URL(origin).host !== request.headers.get('host')) {
+        return NextResponse.json({ error: 'Cross-origin mutation rejected' }, { status: 403 })
+      }
+    } catch { return NextResponse.json({ error: 'Invalid origin' }, { status: 403 }) }
+  }
   const target = `${BASE}${upstreamPath(segments)}${request.nextUrl.search}`
   const body = request.method === 'GET' || request.method === 'HEAD' ? undefined : await request.text()
+  if (body && new TextEncoder().encode(body).length > 2_000_000) {
+    return NextResponse.json({ error: 'Research payload too large' }, { status: 413 })
+  }
 
   try {
     const upstream = await fetch(target, {
@@ -33,6 +49,7 @@ async function handler(request: NextRequest, { params }: { params: { path?: stri
       headers: { 'content-type': 'application/json' },
       body,
       cache: 'no-store',
+      signal: request.signal,
     })
     return new Response(upstream.body, {
       status: upstream.status,

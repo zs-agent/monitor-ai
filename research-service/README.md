@@ -1,122 +1,109 @@
-# research-service
+# 结构化技术情报研究服务
 
-把 [gpt-researcher](https://github.com/assafelovic/gpt-researcher) 的 LangGraph 多智能体流水线挂到 monitor-ai：
-**信号（monitor-ai 快照）→ 研究课题 → 多智能体协作研究 → 带引用的中文技术情报报告**。
-
-上游以子目录 `gpt-researcher/` 形式引入，版本锁定在 `pinned-commit.txt`，不做二次修改；
-本目录只放"胶水"：信号桥接、协作事件流、HTTP 接口。
-
-## 上游协作拓扑（multi_agents，LangGraph）
-
-```
-browser(初步检索)
-  → planner(主编规划章节) → human(可选人工反馈) → researcher × N(每章并行)
-        每章内部：researcher → reviewer →(revise)→ reviser ─┐
-                              ↑──────────────────────────────┘
-  → writer(合稿) → fact_checker ─(revise)→ writer
-  → visualizer(生成 mermaid 图) → publisher(Markdown/PDF/DOCX)
-```
-
-## 安装
-
-```powershell
-cd research-service
-./setup.ps1                 # 克隆上游(固定 commit) + uv 建 venv + 装依赖
-# 然后填 .env：至少 DEEPSEEK_API_KEY
-```
+默认流程由本系统的 LangGraph 图控制：需求与规划 → 按问题研究 → 条件核查 → 结果整合。监测属于前置资料获取阶段，专题研究统一为事实核查、对象比较、动态分析、风险研判。
 
 ## 运行
 
-```powershell
-# 1) 只看桥接挑出的信号（不花钱）
-.venv/Scripts/python.exe run_task.py --signals-only
+从 research-service 目录执行：
 
-# 2) 跑一次信号驱动的研究（实时打印协作事件，产物写入 ./outputs/ 与 ./runs/）
-.venv/Scripts/python.exe run_task.py --focus "AI 智能体编排框架" --top 10
-
-# 3) 起 HTTP 服务给 monitor-ai 调
+```text
 .venv/Scripts/python.exe -m uvicorn service.app:app --host 127.0.0.1 --port 8000
-
-# 4) 跑测试（需要先 uv pip install -r requirements-dev.txt）
+.venv/Scripts/python.exe run_task.py --focus LangGraph --task-type fact_check --action-budget 4
+.venv/Scripts/python.exe run_task.py --query LangGraph --signals-only --json
 .venv/Scripts/python.exe -m pytest tests -q
 ```
 
-## 配置要点（.env）
+前端入口为 `/nexus?tab=research`，经 Next 的 `/api/research/*` 反代。演示使用结构化流程；旧流程只保留为显式 API/CLI 兼容入口（`engine=legacy`），不作为论文核心实现。CLI 默认也使用结构化流程，`--json` 仅输出合法 JSON。
 
-| 变量 | 说明 |
-| --- | --- |
-| `DEEPSEEK_API_KEY` | 必填。多智能体所有 LLM 调用都走 `SMART_LLM` 的 provider |
-| `FAST_LLM`/`SMART_LLM`/`STRATEGIC_LLM` | `provider:model` 格式；`STRATEGIC_LLM` 的模型名会作为多智能体的 `task.model` |
-| `RETRIEVER` | 逗号分隔。免 key：`openalex`（默认）/`arxiv`/`semantic_scholar`/`duckduckgo`；需 key：`tavily`/`bocha`（国内搜索） |
-| `CONTEXT_FILTER=keyword` | 不依赖 embedding 服务（默认 `auto` 也可能退化为 keyword） |
-| `MAX_URLS_TO_SCRAPE` | 抓正文的页数，直接影响 token 成本 |
+## 三个核心机制
 
-检索器实测（2026-10，本机直连）：
+| 研究内容 | 实现 | 可观察结果 |
+|---|---|---|
+| 跨源线索与问题关联 | research_state.py：URL规范化、标题/摘要/资料时间指纹、转载去重、英文词项/中文双字Jaccard、能力/部署/生态/风险词表 | 清洗记录、相似度、挂载问题、未匹配原因、同来源版本冲突 |
+| 状态与预算动作配置 | 状态 `(t,n,u,c)`；`p=1+n+u+I(c<1)`；多选择背包回溯指针 | 候选成本/效用、选中包、暂缓问题、预算账本 |
+| 状态差分与局部复核 | 显式 Q/E/C/R、证据版本指纹、依赖影响定位、来源硬校验 | 新增/变化/稳定/快照缺失、局部唤醒、沿用/修订/待核查、引用原文及旧版结论 |
 
-| 检索器 | 结果 |
-| --- | --- |
-| `openalex` | 可用，但对超长 query 返回 `400`（见下） |
-| `arxiv` | 有 ~3s 限流，并发子查询大量 `429` → 证据上下文为空，默认不启用 |
-| `semantic_scholar` | 无 key 时经常 `429` |
-| `tavily` / `bocha` | 需 key；覆盖新闻与厂商页面最好，情报场景建议配上 |
+Q 采用稳定ID和修订号，C 保存事实/推断、来源键、证据指纹、不确定性与核查记录，E 保存规范化来源键、正文、内容指纹和抓取时间，R 明确存储问题—资料及结论—资料关联。资料变化后保留引用过的旧版本，不将本次快照缺失等同于事实失效。
 
-## HTTP 接口
+动作包：`defer` 成本0效用0，`research` 成本1效用4p，`research_and_verify` 成本2效用4p+2+风险任务偏好1。DP 核心复杂度 O(NBK)，预算为0时 O(NK)；回溯指针空间 O(NB)。相同效用保留已有选择，最后优先较小消耗。效用是状态代理，不能当作真实质量收益。
 
-| 方法 | 路径 | 说明 |
-| --- | --- | --- |
-| GET | `/health` | 上游 commit、模型、检索器、key 是否就位、运行中的任务 |
-| GET | `/research/history` | 报告库列表（运行中 + 已落盘，按时间倒序） |
-| GET | `/research/history/{task_id}` | 单条历史记录全文（报告 + 全部协作事件） |
-| POST | `/research` | `{focus?, query?, categories?, top?, max_sections?}` → `{run_id}` |
-| GET | `/research/{run_id}` | 状态、报告全文、全部协作事件 |
-| GET | `/research/{run_id}/events` | SSE 实时协作事件流（结束/失败后立即收尾） |
+## 接口契约
 
-前端在 `/nexus` 观测中枢的「情报研究」页签里（`/nexus?tab=research`），经 Next 的 `/api/research/*` 反代调用以上接口（`/api/research/run*` → `/research*`，`/api/research/history*` → `/research/history*`）。
+```json
+{"engine":"structured","focus":"LangGraph","task_type":"fact_check","action_budget":4,"scheduler_mode":"adaptive","association_mode":"structured","time_scope":"","snapshot":[]}
+```
 
-## 运行记录
+`task_type`：`fact_check`、`object_comparison`、`dynamic_analysis`、`risk_assessment`。旧四类别名仅用于兼容历史输入，响应状态使用规范名称。`parent_task_id` 指向具有结构化状态的 done/partial 报告，对象及任务类型须一致。
 
-每次运行（HTTP 或 CLI）都落盘到 `runs/<task_id>.json` + `runs/<task_id>.md`：
-报告全文、协作事件、耗时、用到的信号 id。报告库因此不依赖进程内存，重启后仍可回看。
+| 方法 | 后端路径 | Next路径 | 用途 |
+|---|---|---|---|
+| POST | /research/preview | /api/research/preview | 零模型调用预览，返回structured_state与allocation |
+| POST | /research | /api/research/run | 创建任务 |
+| GET | /research/{run_id} | /api/research/run/{run_id} | 当前状态、部分状态图或结果 |
+| GET | /research/{run_id}/events | /api/research/run/{run_id}/events | 有界SSE事件、终态收尾 |
+| POST | /research/{run_id}/cancel | /api/research/run/{run_id}/cancel | 取消并保留动作记账 |
+| GET | /research/history | /api/research/history | 历史记录，limit范围1..200 |
+| GET | /research/history/{task_id} | /api/research/history/{task_id} | 报告、依赖图、审核与父子版本 |
 
-## 展示层规范化（报告小标题）
+终态区分 `done`、`partial`、`failed`、`cancelled`。保存完成后发送终止事件；保存失败仍发送失败事件。运行开始写入临时记录，服务重启将中断任务明确标为 failed。前端用状态轮询补偿SSE中断，处理请求竞态、重复启动与过时回调。
 
-上游 `multi_agents/agents/writer.py::revise_headers` 只负责把 4 个固定槽位
-（Introduction / Table of Contents / Conclusion / References）改名，却把 task 的**全部 guidelines**
-喂给模型，于是模型把准则原文当成标签，写出 `## 引言：说明基于 monitor-ai 监测快照确定分析方向与取证线索…`；
-带图示时 publisher 还会插入硬编码的英文 `## Visualizations`。
+## 对照与消融
 
-`service/postprocess.py` 在展示层按**语义锚点**还原标签（不按固定序号：Visualizations 会插在结论之后）：
+| 参数 | 含义 |
+|---|---|
+| scheduler_mode=adaptive | 状态效用 + MCKP + 局部更新 |
+| scheduler_mode=fixed | 等效用分配，保持相同预算上限 |
+| scheduler_mode=single | 只有研究角色，不运行核查角色；仍按问题组织资料 |
+| scheduler_mode=full | 强制全部问题重新核查，预算不足的结论保留待核查状态 |
+| association_mode=unfiltered | 关闭对象及维度筛选，去重后的线索全部挂载，作为关联机制消融 |
 
-- `参考文献` = 最后一个二级标题；`结论` = `## Visualizations` 前那个，无图示时取倒数第二个
-- `引言` / `目录` = 第 1 / 第 2 个二级标题；`Visualizations` → `可视化`
-- 标签本身 ≤12 字时不动；代码块内的 `##` 不参与识别；正文一字不改
+注入 `snapshot` 可固定监测输入。实验CLI提供冻结检索资料，同时保留真实模型调用：
 
-生效位置：`/research/{run_id}` 与 `/research/history/{task_id}` 的响应、`runs/<task_id>.md`。
-`runs/<task_id>.json` 保留上游原文，便于追溯与对比。
+```text
+.venv/Scripts/python.exe experiment.py --snapshot snapshot-v1.json snapshot-v2.json --focus LangGraph --task-type fact_check --budget 2 4 --mode adaptive fixed single full --repeats 3 --evidence-fixture evidence-v1.json evidence-v2.json --output runs/experiment-matrix
+```
 
-## 已知边界
+每个快照文件为信号数组，冻结资料文件为含title/url/content/retrieval_level的数组，文件数必须与快照数一致，防止T2资料进入T1。失败组保存为failed且不继续作为下一快照父状态。冻结资料须使用真实来源内容，不能用模拟输出替代质量实验。各策略共享预算上限，实际消耗单独报告；单研究角色可能无法用完预算。输入摘要、参数、策略、父子状态、动作失败、耗时、检索批次、模型调用与Token用量写入 `runs/experiments/<task_id>.json`，矩阵另保存完整结果。
 
-- **检索 query 不能塞长文本**：整段信号清单进 `query` 会让 OpenAlex 返回 400、arXiv 限流 429，
-  证据基座直接为空。因此 `signals.py` 的 query 只放「方向 + 前 4 条信号标题」，
-  完整信号清单（含 URL）放进 `guidelines`，供规划/评审/写作阶段要求引用。
-- 报告语言由 prompt 决定（`LANGUAGE=chinese`），中文质量需要用真实课题验证。
-- 无 Tavily/博查 key 时只有学术源（OpenAlex/arXiv），新闻与厂商动态会缺失。
-- `publish_formats` 只开 Markdown：PDF 依赖 weasyprint 的原生库，Windows 上容易崩。
-- 上游协作是固定图，"协作机制本身"尚未改造——这是后续论文创新点的落点。
-- 本机有外部客户端把 `127.0.0.1:8000` 当成 OpenAI 兼容端点，持续探测 `GET /v1/models`（已确认不是本仓库的配置，
-  环境变量与代码里都没有本地 LLM 端点）。响应仍是 404，但访问日志会过滤掉这类 404，避免淹没真实请求。
-  如果发现是某个工具配错了 base URL，改它的配置即可 —— 端口是它认错，不是我们的问题。
-- 部署侧：nginx 的 SSE 反代已写进 `deploy/nginx-monitor-ai.conf`（`/api/research/` 关缓冲 + 3600s 读超时），
-  常驻单元在 `deploy/monitor-ai-research.service`，步骤见 `deploy/deploy-guide.md` 第 4.6 节。
-  注意：本机没有 nginx，配置只做了人工核对，上线前需要在服务器上跑 `nginx -t`。
+## 依赖与配置
 
+LangGraph负责显式状态图。GPT Researcher提供quick_search及scraper_manager组件，不在结构化流程中调用ChiefEditor流水线。保留上游来源、许可证和pinned-commit.txt；自研状态、关联、调度、版本、接口及展示层位于service与src目录。安装仍可使用setup.ps1；修改脚本使用Python避免编码问题。
 
-## 持续研究与协作配置
+模型读取 `.env` 的 SMART_LLM，实际调用模型/提供方写入动作日志。STRATEGIC_LLM是历史任务配置的模型名，两者可能不同，以动作记录为准。RETRIEVER控制检索来源；模型Key不进入前端。前端运行于Next.js 15.5.27；Node版本须满足Next依赖声明。
 
-工作台支持固定配置和按任务、资料状态调整的配置。选择已完成报告后，可勾选继续研究，将历史报告作为待核查上下文，同时比较前后信号快照。后续报告保留父任务、策略版本、输入摘要和变化清单。快照缺失不代表现实事实失效，来源评分不代表事实真实性。
+## 验证与边界
 
-POST /research/preview 接受与创建研究相同的请求，仅返回任务和策略摘要，不调用模型。可选字段 policy_mode 为 adaptive 或 fixed，parent_task_id 为已完成且有报告的数字任务编号。前端代理路径为 /api/research/run/preview。
+本次72项后端回归测试与40项前端测试通过，tsc/lint/生产构建通过。最新真实模型冻结原文验收完成2动作：10条结论中5条支持、5条待核查，整体partial。合成T1/T2样例验证稳定基础事实0重复动作；这些不证明真实质量提升。原文审核标签仍是模型辅助判断，须独立人工评价。
 
-当前状态驱动策略为有界规则：根据问题类型组织研究要求，对风险分析或资料稀疏、缺少来源链接等情况增加审核轮次；它不改变上游图结构，也不宣称自动预算优化。增量研究目前实现资料差异、有界历史上下文与任务版本关联，结论更新仍由研究流程完成，需用资料核查评价。结构化主张级更新属于后续研究方向。
+动作单位限制宏观检索/生成调用，不是费用或Token硬上限。内部HTTP请求数可能超过检索批次；没有提供方用量时Token记为null。失败尝试计费，未发起核查明确记为0动作跳过。资料只有检索摘要时标记snippet，不能仅靠摘要将结论判为支持。
 
-验证：在本目录运行 python -m pytest tests -q。代码测试验证变化分类、去重、审核配置与历史关联；分析质量和节省开销需另做受控实验，不能从单元测试推导。对照时保持模型、检索工具和资料范围一致，并同时记录实际调用开销。
+当前部署按单个服务进程设计，运行句柄保留近期128条，最多8个并行任务；完整历史在磁盘。爬取前拒绝直接私网来源，但重定向/DNS重绑定仍需生产环境网络出口隔离；不将该检查称为完整爬虫沙箱。外网检索可限流、失效或返回空集，测试不会把这些情况伪装为成功。
+
+运行时npm依赖审计0漏洞；开发工具链仍有9项告警（braces、Tailwind及文件匹配/选择器相关组件），未使用强制跨版本修复来伪造清零。详见[完整V2对齐与修复记录](../docs/V2对齐与修复.md)。
+
+## V2新增入口
+
+工作台使用“资料关联 / 分析安排 / 版本对比 / 效果与评阅”四视图；“体验版本更新样例”无需模型密钥，高级参数默认折叠。
+
+| 方法 | 后端路径 | 用途 |
+|---|---|---|
+| GET | /research/contracts | 规范枚举、参数默认值与Schema |
+| POST | /research/demo | 合成开源模型版本更新T1/T2样例 |
+| GET | /research/experiments | 已完成/部分完成的真实实验记录 |
+| POST | /research/history/{task_id}/reviews | 人工抽样核查及分歧处理 |
+
+Next路径统一加/api前缀。合成样例标注synthetic_demo并保存在runs/demos，不混入正常报告/真实对照记录。无标注/未测量的指标显示未知。
+
+请求scheduler_config可设置alpha=4、beta_verify=2、beta_risk=1、w0=wn=wu=wc=1、max_feedback_rounds=1、ablations=[]。消融项drop_n/drop_u/drop_c/drop_t/equal_utility。questions支持稳定id、axis、question、task_type，同一维度可有多问题；manual_associations支持evidence_key、object_name、question_ids、reason，校正后重新预览并用于下一次研究。
+
+合同生成：在仓库根目录执行python scripts/export_contracts.py；追加--check检查前后端枚举是否漂移。默认pytest仅运行自有tests。
+
+RESEARCH_RUNS_DIR隔离运行数据。ASSOCIATION_EMBEDDING_URL/MODEL/KEY配置真实向量服务，缺配置明确报错。默认DuckDuckGo一次有界回退，RESEARCH_SEARCH_FALLBACK=none关闭；requirements.txt固定ddgs版本。OpenAlex限流不再被静默当成没有资料。
+
+API snapshot固定的是关联输入，后续研究仍在线检索；控制检索资料的实验使用CLI逐快照冻结资料。2026-10-16已修复本机代理Fake-IP兼容：仅对Fake-IP域名通过可信HTTPS DNS校验真实公网IP，并固定IP抓取、逐跳校验重定向，保留TLS/私网防护。同一用户问题的联网研究与核查重跑成功；详见[修复记录](../docs/2026-10-16研究失败修复.md)。
+
+离线配置矩阵（在research-service目录）：
+
+```text
+.venv/Scripts/python.exe experiment.py --demo --mode adaptive fixed --alpha 2 4 8 --beta-verify 1 2 --ablation none drop_n drop_t drop_c equal_utility --budget 8 --output runs/demo-matrix
+```

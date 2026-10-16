@@ -1,9 +1,11 @@
 'use client'
 
 import type { Locale } from '@/lib/i18n'
+import type { ReactNode } from 'react'
 
 interface Props {
   locale: Locale
+  structured?: boolean
   focus: string
   onFocusChange: (v: string) => void
   top: number
@@ -15,6 +17,7 @@ interface Props {
   running: boolean
   ready: boolean
   blockedReason: string | null
+  children?: ReactNode
 }
 
 const PRESETS = [
@@ -24,7 +27,7 @@ const PRESETS = [
 ]
 
 export default function Composer({
-  locale, focus, onFocusChange, top, onTopChange, maxSections, onMaxSectionsChange, onStart, onCancel, running, ready, blockedReason,
+  locale, structured = false, focus, onFocusChange, top, onTopChange, maxSections, onMaxSectionsChange, onStart, onCancel, running, ready, blockedReason, children,
 }: Props) {
   const zh = locale === 'zh'
   const disabled = running || !ready
@@ -33,18 +36,18 @@ export default function Composer({
     <div className="p-3 space-y-3">
       <label className="block">
         <span className="block text-[10px] font-semibold uppercase tracking-wider text-muted mb-1.5">
-          {zh ? '关注方向' : 'Focus'}
+          {zh ? '研究对象或问题' : 'Research object or question'}
         </span>
         <input
           value={focus}
           onChange={e => onFocusChange(e.target.value)}
           disabled={running}
-          placeholder={zh ? '例：固态电池产业化' : 'e.g. solid-state battery scale-up'}
+          placeholder={zh ? '例：开源模型新版本的部署要求' : 'e.g. deployment requirements of a new model version'}
           className="w-full bg-elevated border border-edge rounded px-2.5 py-1.5 text-[12px] text-ink outline-none transition-colors focus:border-accent-60 disabled:opacity-50 placeholder:text-muted"
         />
       </label>
 
-      <div className="flex flex-wrap gap-1">
+      {!structured && <div className="flex flex-wrap gap-1">
         {PRESETS.map(p => (
           <button
             key={p.value}
@@ -55,9 +58,9 @@ export default function Composer({
             {zh ? p.zh : p.en}
           </button>
         ))}
-      </div>
+      </div>}
 
-      <div className="flex gap-3">
+      {!structured && <div className="flex gap-3">
         <label className="flex-1">
           <span className="block text-[10px] font-semibold uppercase tracking-wider text-muted mb-1.5">
             {zh ? '信号条数' : 'Signals'}
@@ -68,7 +71,7 @@ export default function Composer({
             className="w-full bg-elevated border border-edge rounded px-2.5 py-1.5 text-[12px] text-ink font-mono outline-none focus:border-accent-60 disabled:opacity-50"
           />
         </label>
-        <label className="flex-1">
+        {!structured && <label className="flex-1">
           <span className="block text-[10px] font-semibold uppercase tracking-wider text-muted mb-1.5">
             {zh ? '报告章节' : 'Sections'}
           </span>
@@ -77,8 +80,10 @@ export default function Composer({
             onChange={e => onMaxSectionsChange(Math.max(1, Math.min(8, Number(e.target.value) || 0)))}
             className="w-full bg-elevated border border-edge rounded px-2.5 py-1.5 text-[12px] text-ink font-mono outline-none focus:border-accent-60 disabled:opacity-50"
           />
-        </label>
-      </div>
+        </label>}
+      </div>}
+
+      {children}
 
       <div className="flex gap-2">
         <button
@@ -104,7 +109,7 @@ export default function Composer({
 
       <p className="text-[10px] text-muted leading-relaxed">
         {zh
-          ? '课题由 monitor-ai 的信号快照自动组题：智能体会先做初步检索，再按章节并行深研、评审改写、事实核查，最后成稿。通常需要几分钟。'
+          ? (structured ? '根据关注对象组织分析问题，在动作预算内检索与核查；后续研究保留稳定内容，复核相关变化。' : '根据监测线索组织课题，经规划、章节研究、审核与整合形成报告。通常需要几分钟。')
           : 'The topic is assembled from monitor-ai signal snapshots: initial retrieval, parallel per-section deep research, review/revision, fact-check, then publication. Usually takes minutes.'}
       </p>
     </div>

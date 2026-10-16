@@ -17,6 +17,18 @@ function timeOf(ts?: number): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`
 }
 
+function eventSummary(event: RunEvent): string {
+  const output = String(event.output || '')
+  if (!output.startsWith('{')) return output
+  try {
+    const data = JSON.parse(output)
+    if (event.event === 'structured_plan') return `安排 ${data.selected?.length ?? 0} 个问题，预留 ${data.reserved_units ?? 0} 次研究与核查；${data.deferred?.length ?? 0} 个问题暂缓。`
+    if (event.event === 'structured_feedback') return `审核发现缺口，剩余 ${data.remaining ?? 0} 次额度，追加 ${data.actions?.length ?? 0} 次补查。`
+    if (event.event === 'structured_progress') return `已使用 ${data.spent_units ?? 0} 次；本次${({ completed: '完成', failed: '失败', cancelled: '取消' } as Record<string, string>)[data.outcome] || '处理中'}。`
+    return '处理记录已保存。'
+  } catch { return output }
+}
+
 export default function AgentTimeline({ locale, events, running }: { locale: Locale; events: RunEvent[]; running: boolean }) {
   const zh = locale === 'zh'
   const [keyOnly, setKeyOnly] = useState(true)
@@ -34,8 +46,8 @@ export default function AgentTimeline({ locale, events, running }: { locale: Loc
         </p>
         <ul className="mt-4 space-y-2 text-[11px] text-muted">
           {(zh
-            ? ['主编：拆解子问题、规划报告章节', '研究员：按章节并行检索、抓取正文', '评审与改写：按情报口径打回重写', '事实核查：核对结论与引用是否成立', '可视化与发布：出图、成稿、给引用']
-            : ['Chief editor: splits questions, plans sections', 'Researchers: parallel retrieval + full-page scraping', 'Reviewer / reviser: enforces the analysis guidelines', 'Fact checker: verifies claims against evidence', 'Visualizer / publisher: diagram, assemble, cite']
+            ? ['需求与规划：关联线索与问题，配置动作预算', '专题执行：按分析问题检索、处理来源资料', '审核核查：结合原文标记支持、矛盾或依据不足', '结果整合：保留结论、证据依赖及版本记录']
+            : ['Planning: associate signals and allocate actions', 'Research: retrieve evidence for each question', 'Verification: supported, contradicted or insufficient', 'Integration: preserve dependencies and versions']
           ).map(t => <li key={t} className="leading-relaxed">· {t}</li>)}
         </ul>
       </div>
@@ -74,7 +86,7 @@ export default function AgentTimeline({ locale, events, running }: { locale: Loc
                 </div>
                 {e.output && (
                   <p className={`mt-0.5 text-[11px] leading-relaxed break-words ${keyOnly ? 'text-ink-2' : 'text-muted'}`}>
-                    {String(e.output).slice(0, keyOnly ? 220 : 400)}
+                    {eventSummary(e).slice(0, keyOnly ? 220 : 400)}
                   </p>
                 )}
               </div>

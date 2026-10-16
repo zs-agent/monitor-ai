@@ -33,7 +33,7 @@ function renderInline(text: string, keyBase: string): ReactNode[] {
       nodes.push(
         <a
           key={key}
-          href={token.slice(close + 2, -1)}
+          href={/^https?:\/\//i.test(token.slice(close + 2, -1)) ? token.slice(close + 2, -1) : undefined}
           target="_blank"
           rel="noopener noreferrer"
           className="text-accent underline decoration-accent-30 underline-offset-2 hover:decoration-accent break-words"

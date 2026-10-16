@@ -3,3 +3,13 @@ fastapi>=0.115
 uvicorn>=0.30
 python-dotenv>=1.0
 httpx>=0.28
+
+# 自有结构化研究状态图（与当前环境一致）
+langgraph==1.2.14
+
+# Upstream Duckduckgo retriever imports ddgs (distinct from duckduckgo-search).
+# Explicit dependency prevents a silent empty fallback after OpenAlex 429.
+ddgs==9.16.0
+
+# Pinned-IP source transport; existing upstream HTML/PDF parsers remain in use.
+aiohttp>=3.9,<4

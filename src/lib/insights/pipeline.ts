@@ -1,4 +1,5 @@
 import fs from 'fs'
+import { createHash } from 'crypto'
 import path from 'path'
 import type { Signal } from '@/types/signal'
 import { aggregateSignals } from '@/lib/aggregate'
@@ -26,7 +27,9 @@ function loadFromDisk(): Partial<Record<'zh' | 'en', InsightsSnapshot>> {
 function saveToDisk(all: Partial<Record<'zh' | 'en', InsightsSnapshot>>): void {
   try {
     fs.mkdirSync(SNAPSHOT_DIR, { recursive: true })
-    fs.writeFileSync(SNAPSHOT_FILE, JSON.stringify(all))
+    const temporary = `${SNAPSHOT_FILE}.${process.pid}.tmp`
+    fs.writeFileSync(temporary, JSON.stringify(all))
+    fs.renameSync(temporary, SNAPSHOT_FILE)
   } catch (e) {
     console.warn(`[insights] failed to persist snapshot: ${(e as Error)?.message}`)
   }
@@ -44,22 +47,28 @@ export async function buildCategory(
 ): Promise<CategoryInsight> {
   const ids = signals.map(s => s.id)
   const idSet = new Set(ids)
-  const unchanged = previous && previous.basedOnSignalIds.length === ids.length && previous.basedOnSignalIds.every(id => idSet.has(id))
-  const hasNew = !previous || signals.some(s => !previous.basedOnSignalIds.includes(s.id))
+  const fingerprint = createHash("sha256").update(JSON.stringify(signals.map(s => [s.id, s.title, s.summary, s.publishedAt]).sort())).digest("hex")
+  const contentChanged = !!previous?.inputFingerprint && previous.inputFingerprint !== fingerprint
+  const unchanged = !contentChanged && !previous?.stale && previous && previous.basedOnSignalIds.length === ids.length && previous.basedOnSignalIds.every(id => idSet.has(id))
+  const hasNew = !unchanged
 
   // 无新增 → 复用旧文本（保留 generatedAt 表示"内容未变"）
   if (unchanged && previous) return previous
+  if (!signals.length) return { category, text: '', basedOnSignalIds: [], inputFingerprint: fingerprint, stale: false, generatedAt: new Date().toISOString(), coveredCount: 0, signalTitles: [] }
 
-  const text = hasNew
-    ? await generateInsight(category, signals.slice(0, 20).map(s => s.title))
-    : (previous?.text ?? '')
+  let text: string | null = previous?.text ?? ""
+  try {
+    if (hasNew) text = await generateInsight(category, signals.slice(0, 20).map(s => s.title))
+  } catch { text = null }
   const finalText = text ?? previous?.text ?? ''
 
   return {
     category,
     text: finalText,
     basedOnSignalIds: ids,
-    generatedAt: new Date().toISOString(),
+    inputFingerprint: fingerprint,
+    stale: text === null,
+    generatedAt: text === null && previous ? previous.generatedAt : new Date().toISOString(),
     coveredCount: ids.length,
     // 无 LLM 结果时只带高价值精选标题（importance≥4），全量由时间轴承担，避免与时间轴重复
     signalTitles: finalText

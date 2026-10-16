@@ -1,5 +1,7 @@
 node_modules/
 .next/
+.next-*/
+.next-audit-build/
 .env
 .env.local
 .env.*.local
