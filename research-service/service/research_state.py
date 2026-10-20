@@ -74,7 +74,10 @@ def evidence_record(item):
     fetched_at = item.get('fetched_at')
     if type(fetched_at) not in (int, float) or not math.isfinite(fetched_at) or fetched_at <= 0:
         fetched_at = time.time()
-    return dict(key=key, fingerprint=digest({k: fields[k] for k in ("title", "summary", "published_at")}), fetched_at=fetched_at, **fields)
+    # A stable abstract must not hide changes in the acquired original text.
+    fingerprint_fields = {k: fields[k] for k in ("title", "summary", "published_at")}
+    fingerprint_fields["content_sha256"] = hashlib.sha256(content.encode("utf-8")).hexdigest()
+    return dict(key=key, fingerprint=digest(fingerprint_fields), fetched_at=fetched_at, **fields)
 
 
 def linked(issue, evidence, focus):

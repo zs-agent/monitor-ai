@@ -78,7 +78,8 @@ class ResearchAdapter:
                 self.metrics['pages_requested'] += 1
                 page = await fetch_source(record['url'])
                 parsed = evidence_record(page)
-                record.update(content=parsed['content'], fetched_at=time.time(), retrieval_level='full_text', link_available=True,
+                acquired_fingerprint = evidence_record(dict(record, raw_content=page.get('raw_content') or parsed['content']))['fingerprint']
+                record.update(content=parsed['content'], fingerprint=acquired_fingerprint, fetched_at=time.time(), retrieval_level='full_text', link_available=True,
                               final_url=page.get('final_url', record['url']))
                 self._acquired_sources[record['key']] = deepcopy(record)
             except asyncio.CancelledError:
@@ -218,7 +219,10 @@ async def run_structured(task, bus, adapter=None):
                 search_query = normalize_query(graph['focus']) + ' ' + {'identity':'release version', 'capability':'model benchmark capability', 'deployment':'deployment cost', 'ecosystem':'framework repository', 'risk':'security risk'}[issue['axis']] + ' ' + graph.get('time_scope', '')
                 event['search_query'] = search_query.strip()
                 try:
-                    sources = [graph['evidence'][key] for key in issue['evidence_keys'] if key in graph['evidence']][:4]
+                    # First research has no cited claims yet: include the actual
+                    # signal-to-question associations, then previously cited sources.
+                    source_keys = dict.fromkeys(issue.get('signal_keys', []) + issue['evidence_keys'])
+                    sources = [graph['evidence'][key] for key in source_keys if key in graph['evidence'] and not graph['evidence'][key].get('duplicate_of')][:4]
                     event['associated_sources'] = [s['key'] for s in sources]
                     if hasattr(adapter, 'search_with_sources'):
                         evidence = await adapter.search_with_sources(search_query, sources)
