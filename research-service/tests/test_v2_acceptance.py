@@ -21,7 +21,7 @@ def state(kind='fact_check', config=None):
 
 
 def test_default_formula_and_fractional_mckp_matches_exhaustive():
-    graph = state('risk_assessment')
+    graph = state('risk_assessment', dict(utility_profile='legacy_v2'))
     options = action_options(graph)
     for qid, values in options.items():
         features = graph['issues'][qid]['features']
@@ -85,8 +85,8 @@ def test_manual_association_records_reason_and_blocks_foreign_question():
 def test_semantic_adapter_requires_real_scores_and_keyword_mode_is_separate():
     with pytest.raises(ValueError, match='语义'):
         build_state('Atlas', 'fact_check', [SIGNAL], association_mode='semantic')
-    graph = build_state('Atlas', 'fact_check', [SIGNAL], association_mode='semantic', semantic_scores={'https://example.org/atlas': .8})
-    assert graph['association']['matches'][0]['score'] == .8
+    graph = build_state('Atlas', 'fact_check', [SIGNAL], association_mode='semantic', semantic_scores={'https://example.org/atlas': .8, '__dimensions__': {'https://example.org/atlas': {'capability': .8, 'deployment': .8}}})
+    assert graph['association']['matches'][0]['score'] == .9  # cosine mapped to [0,1] per V3
     assert graph['association']['matches'][0]['question_ids']
     assert build_state('Atlas', 'fact_check', [SIGNAL], association_mode='keyword')['association_mode'] == 'keyword'
 
@@ -289,8 +289,8 @@ def test_rate_limit_is_logged_and_fallback_is_bounded(monkeypatch):
 def test_experiment_fixtures_are_isolated_by_snapshot(tmp_path):
     import experiment
     first, second = tmp_path/'t1.json', tmp_path/'t2.json'
-    first.write_text(json.dumps([dict(SIGNAL, summary='old release')]), encoding='utf-8')
-    second.write_text(json.dumps([dict(SIGNAL, summary='new release')]), encoding='utf-8')
+    first.write_text(json.dumps([dict(SIGNAL, summary='old release',content='old original full text')]), encoding='utf-8')
+    second.write_text(json.dumps([dict(SIGNAL, summary='new release',content='new original full text')]), encoding='utf-8')
     with pytest.raises(ValueError, match='T2'):
         experiment.load_fixtures([str(first)], 2)
     fixtures = experiment.load_fixtures([str(first), str(second)], 2)

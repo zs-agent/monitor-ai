@@ -102,14 +102,14 @@ class _PinnedResolver(AbstractResolver):
         pass
 
 
-async def _download_once(url, addresses):
+async def _download_once(url, addresses, request_headers=None):
     host = urlsplit(url).hostname.encode('idna').decode('ascii')
     connector = aiohttp.TCPConnector(resolver=_PinnedResolver(host, addresses), use_dns_cache=False)
     async with aiohttp.ClientSession(connector=connector, trust_env=False,
                                     timeout=aiohttp.ClientTimeout(total=20, connect=8)) as client:
-        async with client.get(url, allow_redirects=False, headers={'User-Agent': 'monitor-ai-research/0.4'}) as response:
+        async with client.get(url, allow_redirects=False, headers={'User-Agent': 'monitor-ai-research/0.4', **(request_headers or {})}) as response:
             headers = dict(response.headers)
-            if response.status in (301, 302, 303, 307, 308):
+            if response.status in (301, 302, 303, 307, 308, 304):
                 return response.status, headers, b''
             if response.status >= 400:
                 raise SourceAccessError('source_http_error', f'来源网页返回HTTP {response.status}')
@@ -149,11 +149,24 @@ def _parse_source(url, headers, body):
     return content, title
 
 
-async def fetch_source(url):
+async def fetch_source(url, cached=None):
     current = url
-    for _ in range(6):
+    for attempt in range(6):
         addresses = await resolve_public_url(current)
-        status, headers, body = await _download_once(current, addresses)
+        conditional = {}
+        if cached and current == url:
+            if cached.get('etag'): conditional['If-None-Match'] = cached['etag']
+            if cached.get('last_modified'): conditional['If-Modified-Since'] = cached['last_modified']
+        try:
+            status, headers, body = await _download_once(current, addresses, conditional) if conditional else await _download_once(current, addresses)
+        except Exception as exc:
+            exc.request_count = attempt + 1
+            raise
+        if status == 304:
+            if not cached or not cached.get('content') or cached.get('retrieval_level') not in ('full_text', 'frozen_source'):
+                raise SourceAccessError('source_invalid_304', '来源返回304但没有可复用的已取得正文')
+            return dict(url=url, raw_content=cached['content'], title=cached.get('title', ''), final_url=current, not_modified=True,
+                        etag=cached.get('etag'), last_modified=cached.get('last_modified'), request_count=attempt+1)
         if status in (301, 302, 303, 307, 308):
             location = next((v for k, v in headers.items() if k.lower() == 'location'), '')
             if not location:
@@ -161,5 +174,6 @@ async def fetch_source(url):
             current = urljoin(current, location)
             continue  # Resolve and validate the target before any connection.
         content, title = await asyncio.to_thread(_parse_source, current, headers, body)
-        return dict(url=url, raw_content=content, title=title, final_url=current)
+        lowered = {k.lower():v for k,v in headers.items()}
+        return dict(url=url, raw_content=content, title=title, final_url=current, etag=lowered.get('etag'), last_modified=lowered.get('last-modified'), request_count=attempt+1)
     raise SourceAccessError('source_redirect_failed', '来源重定向次数过多')

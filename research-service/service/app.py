@@ -25,9 +25,9 @@ from . import signals as sig
 from .insights import router as insights_router
 from . import runner as persistence
 from .evolution import prepare_research
-from .research_state import build_state, infer_type, action_options, allocate
+from .research_state import build_state, infer_type, action_options, allocate, schedule
 from .structured_workflow import run_structured
-from .contracts import TaskType, AgentRole, ActionPackage, VerificationStatus, UpdateStatus, RunStatus, SchedulerConfig, QuestionSpec, ManualAssociation, HumanReview
+from .contracts import TaskType, AgentRole, ActionPackage, VerificationStatus, UpdateStatus, RunStatus, SchedulerConfig, QuestionSpec, ManualAssociation, HumanReview, AssociationConfig
 from .postprocess import normalize_report_labels
 from .roles import run_intelligence_roles
 from .runner import RUNS_DIR, EventBus, default_model, load_history, load_run, run_task, save_run
@@ -97,8 +97,9 @@ class ResearchRequest(BaseModel):
     def legacy_task_type(cls, value):
         from .research_state import normalize_type
         return normalize_type(value)
-    scheduler_mode: Literal["adaptive", "fixed", "full", "single"] = "adaptive"
-    association_mode: Literal["structured", "unfiltered", "keyword", "semantic"] = "structured"
+    scheduler_mode: Literal["adaptive", "fixed", "full", "single", "greedy"] = "adaptive"
+    association_mode: Literal["structured", "jaccard", "unfiltered", "keyword", "semantic", "hybrid"] = "structured"
+    association_config: AssociationConfig = Field(default_factory=AssociationConfig)
     action_budget: int = Field(default=6, ge=0, le=64, strict=True)
     scheduler_config: SchedulerConfig = Field(default_factory=SchedulerConfig)
     questions: list[QuestionSpec] | None = Field(default=None, max_length=20)
@@ -214,12 +215,13 @@ def _prepare_task(req: ResearchRequest, semantic=None):
             kind = req.task_type.value if req.task_type else infer_type(focus)
             graph = build_state(focus, kind, chosen, (parent or {}).get("structured_state"), req.time_scope, req.association_mode,
                 req.scheduler_config.model_dump(), [q.model_dump(mode='json') for q in req.questions] if req.questions else None,
-                [m.model_dump() for m in req.manual_associations], semantic)
+                [m.model_dump() for m in req.manual_associations], semantic, req.association_config.model_dump())
             graph['data_mode'] = req.data_mode
-            allocation = allocate(action_options(graph, req.scheduler_mode), req.action_budget)
+            allocation = schedule(graph, req.scheduler_mode, req.action_budget)
             task.update(engine="structured", structured_state=graph, action_budget=req.action_budget,
                         data_mode=req.data_mode, storage_group='demos' if req.data_mode == 'synthetic_demo' else 'normal',
                         scheduler_mode=req.scheduler_mode, scheduler_config=req.scheduler_config.model_dump(), action_timeout_sec=req.action_timeout_sec,
+                        parent_state_for_refresh=(parent or {}).get("structured_state"),
                         research_policy={"version":"structured-v1", "task_type":kind,
                           "scheduler_mode":req.scheduler_mode,"allocation":allocation,
                           "parent_task_id":req.parent_task_id,"affected":graph["affected"],"delta":graph["delta"]})
@@ -233,11 +235,11 @@ def _prepare_task(req: ResearchRequest, semantic=None):
 
 async def _prepare_request(req):
     semantic = None
-    if req.association_mode == 'semantic':
+    if req.association_mode in ('semantic', 'hybrid'):
         from .semantic import semantic_scores
         try:
             _, chosen = _build_task(req)
-            semantic = await semantic_scores((req.query or req.focus).strip(), chosen)
+            semantic = await semantic_scores((req.query or req.focus).strip(), chosen, req.association_config.model_dump())
         except Exception as exc:
             raise HTTPException(status_code=400, detail='语义关联不可用：' + str(exc)) from exc
     return _prepare_task(req, semantic)
@@ -272,7 +274,7 @@ async def experiments(limit: int = Query(default=40, ge=1, le=200)):
 class DemoRequest(BaseModel):
     action_budget: int = Field(default=10, ge=0, le=64, strict=True)
     scheduler_config: SchedulerConfig = Field(default_factory=SchedulerConfig)
-    scheduler_mode: Literal['adaptive', 'fixed', 'single', 'full'] = 'adaptive'
+    scheduler_mode: Literal['adaptive', 'fixed', 'single', 'full', 'greedy'] = 'adaptive'
 
 
 @app.post('/research/demo')

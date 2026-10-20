@@ -10,11 +10,11 @@ export type ResearchState = V2ResearchState
 
 const actionLabel: Record<string, string> = { defer: '暂缓', research: '仅研究', research_review: '研究 + 核查', research_and_verify: '研究 + 核查' }
 const statusLabel: Record<string, string> = { supported: '支持', contradicted: '有矛盾', insufficient: '依据不足', pending_verification: '待核查', pending: '待核查', retained: '沿用', revised: '已修订' }
-const reasonLabel: Record<string, string> = { full_recheck_policy: '对照策略要求全量复核', conflicting_version: '同来源版本冲突 · 待复核', association_policy_changed: '关联策略改变', matched: '已挂载', duplicate_url: 'URL重复', duplicate_content: '内容转载', low_similarity: '低相关', dimension_unmatched: '维度未匹配', accepted: '保留', related_signal_changed: '关联线索变化', dependency_requires_recheck: '依赖变化 / 缺失', previously_unresolved: '尚未解决', no_previous_analysis: '缺历史结论', time_scope_changed: '时间范围改变' }
+const reasonLabel: Record<string, string> = { object_mismatch: '对象不一致', version_unconfirmed: '版本待确认', version_mismatch: '版本不一致', full_recheck_policy: '对照策略要求全量复核', conflicting_version: '同来源版本冲突 · 待复核', association_policy_changed: '关联策略改变', matched: '已挂载', duplicate_url: 'URL重复', duplicate_content: '内容转载', low_similarity: '低相关', dimension_unmatched: '维度未匹配', accepted: '保留', related_signal_changed: '关联线索变化', dependency_requires_recheck: '依赖变化 / 缺失', previously_unresolved: '尚未解决', no_previous_analysis: '缺历史结论', time_scope_changed: '时间范围改变' }
 const axes: Record<string, string> = { identity: '版本事实', capability: '能力', deployment: '部署', ecosystem: '生态', risk: '风险' }
 const tabs = ['资料关联', '分析安排', '版本对比', '效果与评阅']
 
-export default function MechanismView({ state, preview = false, taskId, onCorrect, comparisons = [] }: { state: ResearchState; preview?: boolean; taskId?: string; onCorrect?: (value: ManualAssociation) => Promise<void>; comparisons?: { label: string; state: ResearchState }[] }) {
+export default function MechanismView({ state, preview = false, taskId, onCorrect, onCritical, comparisons = [] }: { state: ResearchState; preview?: boolean; taskId?: string; onCorrect?: (value: ManualAssociation) => Promise<void>; onCritical?: (id: string, critical: boolean) => Promise<void>; comparisons?: { label: string; state: ResearchState }[] }) {
   const [tab, setTab] = useState(0)
   const [chosen, setChosen] = useState<string | null>(null)
   const [focusedEvidence, setFocusedEvidence] = useState<string | null>(null)
@@ -49,6 +49,7 @@ export default function MechanismView({ state, preview = false, taskId, onCorrec
           <div className="text-muted">{reasonLabel[m.reason] || m.reason} {m.question_ids.map(q => <button key={q} onClick={() => { setChosen(q); setTab(2) }} className="ml-2 text-accent underline">{axes[state.issues[q]?.axis] || q}</button>)}</div>
           <p className="text-[10px] text-muted break-all">指纹 {m.fingerprint?.slice(0, 24)} · 命中词项：{m.matched_terms?.join('、') || '无'}</p>
           <p className="text-[10px] text-muted">维度命中：{Object.entries(m.dimension_hits || {}).filter(([, values]) => values.length).map(([qid, values]) => `${axes[state.issues[qid]?.axis] || qid}(${values.join('、')})`).join('；') || '无'}</p>
+          {m.dimension_scores && <p className="text-[10px] text-muted">问题方向得分：{Object.entries(m.dimension_scores).map(([id, score]) => (axes[state.issues[id]?.axis] || id) + ' ' + score.toFixed(2)).join('；')}</p>}
           {m.manual && <p className="text-accent text-[10px]">人工校正：{m.manual.object_name} · {m.manual.reason}</p>}
           {onCorrect && !m.duplicate_of && <button className="border border-edge rounded px-2 py-1 text-accent" onClick={() => { setCorrection({ evidence_key: m.key, object_name: state.focus, question_ids: m.question_ids, reason: '' }); setCorrectionError('') }}>校正归属</button>}
         </div>)}
@@ -69,13 +70,16 @@ export default function MechanismView({ state, preview = false, taskId, onCorrec
       </>}
       {tab === 1 && <>
         <AgentFlow state={state} />
-        <p className="text-muted">优先处理资料有变化、尚未解决或资料不足的问题。次数不够时会保留“待核查”。</p><details><summary className="cursor-pointer text-muted">查看计算规则</summary><p className="text-muted">p=w₀+wₙn+wᵤu+w꜀I(c&lt;1)。α={state.scheduler_config?.alpha ?? 4}；核查偏好={state.scheduler_config?.beta_verify ?? 2}；风险偏好={state.scheduler_config?.beta_risk ?? 1}。</p></details>
+        <p className="text-muted">优先处理资料有变化、尚未解决或资料不足的问题。次数不够时会保留“待核查”。</p><details><summary className="cursor-pointer text-muted">查看计算规则</summary><p className="text-muted">p=w₀+wₙn+wᵤu+w꜀I(c&lt;1)。α={state.scheduler_config?.alpha ?? 4}；配置={state.scheduler_config?.utility_profile || 'legacy_v2'}；事实/比较/变化/风险核查偏好={state.scheduler_config?.beta_fact ?? 2}/{state.scheduler_config?.beta_comparison ?? 4}/{state.scheduler_config?.beta_dynamic ?? 4}/{state.scheduler_config?.beta_risk_v3 ?? 8}；补查预留={state.allocation?.reserve_units ?? 0}次。</p></details>
         <div className="flex justify-between"><b>已用次数 {allocation?.spent_units ?? 0} / {allocation?.budget_units ?? 0}</b><span className="text-muted">已安排 {allocation?.reserved_units ?? 0} 次</span></div>
         <progress aria-label="动作预算消耗" className="w-full accent-[var(--accent)]" value={allocation?.spent_units ?? 0} max={Math.max(1, allocation?.budget_units ?? 1)} />
         {issues.map(q => {
           const pick = allocation?.selected.find(a => a.issue_id === q.id)
           const f = q.features
           return <div key={q.id} className="border border-edge rounded p-3 space-y-2">
+            {onCritical && (q.task_type === 'risk_assessment' || q.task_type === 'object_comparison') && <label className="flex gap-2 text-muted"><input type="checkbox" checked={q.critical || false} disabled={correcting} onChange={async e => { setCorrecting(true); setCorrectionError(''); try { await onCritical(q.id, e.target.checked) } catch (error) { setCorrectionError(error instanceof Error ? error.message : '修改失败') } finally { setCorrecting(false) } }} />重点核查：次数不足时暂缓，不只给草稿</label>}
+            {correctionError && <p role="alert" className="text-red-500">{correctionError}</p>}
+
             <div className="flex justify-between gap-2"><b>{q.question}</b><span className="shrink-0 text-accent">{q.status === 'carried' ? '稳定沿用 · 0动作' : actionLabel[pick?.kind || 'defer']}</span></div>
             <p className="text-muted">新资料：{f?.n ? "有" : "无"} · 问题：{f?.u ? "未解决" : "已有结论"} · 资料覆盖：{f ? `${Math.round(f.c * 100)}%` : "未知"} · 优先程度：{f?.priority ?? "—"}</p>
             {f?.contributions && <details><summary className="cursor-pointer text-muted text-[10px]">优先程度怎么算</summary><p className="text-muted">p = {Object.values(f.contributions).join(" + ")} = {f.priority}；任务类型 {q.task_type || state.task_type}</p></details>}

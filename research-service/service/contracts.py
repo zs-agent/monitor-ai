@@ -1,7 +1,7 @@
 """Canonical V2 wire contracts. Exported to TypeScript by scripts/export_contracts.py."""
 from enum import Enum
 from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field, AliasChoices, StrictBool, StrictStr
+from pydantic import BaseModel, ConfigDict, Field, AliasChoices, StrictBool, StrictStr, model_validator
 
 
 class TaskType(str, Enum):
@@ -55,15 +55,28 @@ class QuestionStatus(str, Enum):
 
 class SchedulerConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False, strict=True)
+    @model_validator(mode='before')
+    @classmethod
+    def legacy_profile(cls, value):
+        if isinstance(value, dict) and 'utility_profile' not in value and any(k in value for k in ('beta_verify', 'beta_risk')):
+            return dict(value, utility_profile='legacy_v2')
+        return value
     alpha: float = Field(default=4, ge=0, le=1000)
     beta_verify: float = Field(default=2, ge=0, le=1000)
     beta_risk: float = Field(default=1, ge=0, le=1000)
+    utility_profile: Literal['legacy_v2', 'proposal_v3'] = 'proposal_v3'
+    beta_fact: float = Field(default=2, ge=0, le=1000)
+    beta_comparison: float = Field(default=4, ge=0, le=1000)
+    beta_dynamic: float = Field(default=4, ge=0, le=1000)
+    beta_risk_v3: float = Field(default=8, ge=0, le=1000)
+    reserve_units: int = Field(default=1, ge=0, le=64, strict=True)
+    reserve_ratio: float | None = Field(default=None, ge=0, lt=1)
     w0: float = Field(default=1, ge=0, le=1000)
     wn: float = Field(default=1, ge=0, le=1000)
     wu: float = Field(default=1, ge=0, le=1000)
     wc: float = Field(default=1, ge=0, le=1000)
-    ablations: list[Literal["drop_n", "drop_u", "drop_c", "drop_t", "equal_utility"]] = Field(default_factory=list, max_length=5)
-    max_feedback_rounds: int = Field(default=1, ge=0, le=8, strict=True)
+    ablations: list[Literal["drop_n", "drop_u", "drop_c", "drop_t", "drop_reserve", "equal_utility"]] = Field(default_factory=list, max_length=6)
+    max_feedback_rounds: int = Field(default=2, ge=0, le=2, strict=True)
 
 
 class QuestionSpec(BaseModel):
@@ -72,6 +85,38 @@ class QuestionSpec(BaseModel):
     axis: Literal["identity", "capability", "deployment", "ecosystem", "risk"]
     question: str = Field(min_length=1, max_length=500)
     task_type: TaskType
+    critical: bool = Field(default=False, strict=True)
+
+
+class AssociationConfig(BaseModel):
+    model_config = ConfigDict(extra='forbid', allow_inf_nan=False, strict=True)
+    aliases: dict[str, list[str]] = Field(default_factory=dict, max_length=100)
+    expected_versions: list[str] = Field(default_factory=list, max_length=20)
+    object_threshold: float = Field(default=0.04, ge=0, le=1)
+    hybrid_object_threshold: float = Field(default=0.35, ge=0, le=1)
+    dimension_threshold: float = Field(default=0.05, ge=0, le=1)
+    hybrid_dimension_threshold: float = Field(default=0.35, ge=0, le=1)
+    semantic_threshold: float = Field(default=0.675, ge=0, le=1)
+    semantic_dimension_threshold: float = Field(default=0.675, ge=0, le=1)
+    fusion_lambda: float = Field(default=0.5, ge=0, le=1)
+    normalize_aliases: bool = True
+    semantic_recall: bool = True
+    constrain_versions: bool = True
+
+    @model_validator(mode='after')
+    def check_aliases(self):
+        owners = {}
+        for canonical, aliases in self.aliases.items():
+            if not canonical.strip() or len(canonical)>200 or len(aliases)>20:
+                raise ValueError('别名表每对象最多20个别名，名称须为1..200字符')
+            for alias in [canonical] + aliases:
+                if not alias.strip() or len(alias)>200:
+                    raise ValueError('别名须为1..200字符')
+                normalized=alias.casefold().strip()
+                if normalized in owners and owners[normalized] != canonical:
+                    raise ValueError('同一别名不能归于不同对象')
+                owners[normalized]=canonical
+        return self
 
 
 class ManualAssociation(BaseModel):

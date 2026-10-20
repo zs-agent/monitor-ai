@@ -14,7 +14,7 @@ import math
 from datetime import datetime
 
 from .evolution import canonical_url
-from .contracts import SchedulerConfig, ConclusionPayload, StructuredConclusion, ReviewCheck, TaskType
+from .contracts import SchedulerConfig, ConclusionPayload, StructuredConclusion, ReviewCheck, TaskType, AssociationConfig
 from pydantic import ValidationError
 
 TASK_TYPES = tuple(kind.value for kind in TaskType)
@@ -35,6 +35,16 @@ AXIS_WORDS = {
     "ecosystem": ("repo", "framework", "生态", "框架", "维护", "开源", "仓库"),
     "risk": ("risk", "security", "风险", "安全", "限制"),
 }
+AXIS_DESCRIPTIONS = {
+    'identity': '技术对象的基础架构、发布身份和版本事实。Architecture, release identity and version facts.',
+    'capability': '模型能力、基准性能和共同测试条件。Model capability, benchmark performance and comparable test conditions.',
+    'deployment': '部署硬件、内存显存、量化精度、运行配置和成本。Deployment hardware, memory, quantization, runtime configuration and cost.',
+    'ecosystem': '开源仓库、框架兼容、维护活跃度和开发生态。Open-source repositories, compatibility, maintenance and developer ecosystem.',
+    'risk': '安全漏洞、攻击反馈、应用限制、反例和不确定性。Security vulnerabilities, attack feedback, limitations, counterevidence and uncertainty.',
+}
+GENERIC_OBJECT_TERMS = {'ai','llm','model','models','framework','frameworks','tool','tools','agent','agents',
+    'compare','comparison','versus','vs','latest','recent','new','open','source','deployment','cost','risk',
+    'what','which','how','is','are','the','a','an','and','or','of','for','in','on','to','with','update','version'}
 
 
 def digest(value):
@@ -55,6 +65,58 @@ def similarity(a, b):
     return len(x & y) / max(1, len(x | y))
 
 
+def normalize_aliases(focus, content, cfg):
+    if not cfg.get('normalize_aliases', True):
+        return focus, content
+    for canonical, aliases in cfg.get('aliases', {}).items():
+        for alias in sorted([canonical] + aliases, key=len, reverse=True):
+            if alias.strip():
+                pattern = re.escape(alias)
+                if re.fullmatch(r'[a-zA-Z0-9_. -]+', alias):
+                    pattern = r'(?<![a-zA-Z0-9])' + pattern + r'(?![a-zA-Z0-9])'
+                focus = re.sub(pattern, canonical, focus, flags=re.I)
+                content = re.sub(pattern, canonical, content, flags=re.I)
+    return focus, content
+
+
+def budget_split(budget, cfg):
+    reserve = 0 if 'drop_reserve' in cfg.get('ablations', []) else min(budget, math.ceil(budget * cfg['reserve_ratio']) if cfg.get('reserve_ratio') is not None else cfg.get('reserve_units', 1))
+    return budget - reserve, reserve
+
+
+def allocate_greedy(options, budget):
+    # Validate candidates with the same boundary as DP.
+    allocate(options, 0)
+    chosen = {}
+    spent = 0
+    while True:
+        upgrades = []
+        for key in sorted(options):
+            prior = chosen.get(key, dict(cost=0, utility=0))
+            for option in options[key]:
+                cost = option['cost'] - prior['cost']
+                gain = option['utility'] - prior['utility']
+                if cost > 0 and gain > 0 and spent + cost <= budget:
+                    upgrades.append((-gain/cost, cost, key, -option['cost'], option))
+        if not upgrades: break
+        _, cost, key, _, option = min(upgrades, key=lambda x:x[:4])
+        chosen[key] = dict(option, issue_id=key)
+        spent += cost
+    return dict(selected=[chosen[k] for k in sorted(chosen)], reserved_units=spent,
+                proxy_utility=sum(o['utility'] for o in chosen.values()), budget_units=budget,
+                solver='marginal-gain-greedy', utility_is_proxy=True, candidates=options,
+                deferred=sorted(set(options)-set(chosen)))
+
+
+def schedule(state, mode, budget, config=None):
+    cfg = SchedulerConfig.model_validate(config or state.get('scheduler_config') or {}).model_dump()
+    initial, reserve = budget_split(budget, cfg)
+    solver = allocate_greedy if mode == 'greedy' else allocate
+    result = solver(action_options(state, mode, cfg), initial)
+    result.update(budget_units=budget, initial_budget=initial, reserve_units=reserve)
+    return result
+
+
 def infer_type(query):
     for kind, terms in (("risk_assessment", ("风险", "安全", "risk")),
                         ("object_comparison", ("比较", "对比", "选型", "compare")),
@@ -69,7 +131,7 @@ def evidence_record(item):
     title = str(item.get("title") or "")[:500]
     content = str(item.get("raw_content") or item.get("content") or item.get("body") or item.get("summary") or "")
     key = url or "id:" + str(item.get("id") or digest([title, content[:12000]])[:16])[:200]
-    fields = {"title": title, "content": content[:12000], "summary": str(item.get("summary") or content[:2000])[:2000], "published_at": str(item.get("publishedAt") or item.get("published_at") or item.get("date") or "")[:100],
+    fields = {"title": title, "content": content, "summary": str(item.get("summary") or content[:2000])[:2000], "published_at": str(item.get("publishedAt") or item.get("published_at") or item.get("date") or "")[:100],
               "source": str(item.get("source") or item.get("providerId") or "")[:200], "url": url}
     fetched_at = item.get('fetched_at')
     if type(fetched_at) not in (int, float) or not math.isfinite(fetched_at) or fetched_at <= 0:
@@ -77,7 +139,9 @@ def evidence_record(item):
     # A stable abstract must not hide changes in the acquired original text.
     fingerprint_fields = {k: fields[k] for k in ("title", "summary", "published_at")}
     fingerprint_fields["content_sha256"] = hashlib.sha256(content.encode("utf-8")).hexdigest()
-    return dict(key=key, fingerprint=digest(fingerprint_fields), fetched_at=fetched_at, **fields)
+    metadata = {k:item[k] for k in ('retrieval_level','link_available','etag','last_modified','duplicate_of') if k in item}
+    return dict(key=key, fingerprint=digest(fingerprint_fields), fetched_at=fetched_at,
+                content_group=digest(re.sub(r'\s+', ' ', content).strip()), **fields, **metadata)
 
 
 def linked(issue, evidence, focus):
@@ -89,12 +153,13 @@ def linked(issue, evidence, focus):
 
 
 def build_state(focus, task_type, signals, parent=None, time_scope="", association_mode="structured",
-                scheduler_config=None, questions=None, manual_associations=None, semantic_scores=None):
-    if association_mode not in ("structured", "unfiltered", "keyword", "semantic"):
+                scheduler_config=None, questions=None, manual_associations=None, semantic_scores=None, association_config=None):
+    if association_mode not in ("structured", "jaccard", "unfiltered", "keyword", "semantic", "hybrid"):
         raise ValueError("invalid association mode")
     config = SchedulerConfig.model_validate(scheduler_config or {}).model_dump()
-    if association_mode == "semantic" and semantic_scores is None:
+    if association_mode in ("semantic", "hybrid") and semantic_scores is None:
         raise ValueError("语义关联需要配置向量服务，不能以词项分数代替语义相似度")
+    assoc_cfg = AssociationConfig.model_validate(association_config or {}).model_dump()
     task_type = normalize_type(task_type)
     if parent:
         parent = deepcopy(parent)
@@ -118,23 +183,25 @@ def build_state(focus, task_type, signals, parent=None, time_scope="", associati
             continue
         e = evidence_record(item)
         snapshot_versions.setdefault(e["key"], {})[e["fingerprint"]] = deepcopy(e)
-        reason = "duplicate_url" if e["key"] in current else "duplicate_content" if e["fingerprint"] in seen_content else "accepted"
+        group = e['content_group'] if e.get('retrieval_level') in ('full_text','frozen_source') else e['fingerprint']
+        reason = "duplicate_url" if e["key"] in current else "duplicate_content" if group in seen_content else "accepted"
         if e["key"] in current and e["fingerprint"] != current[e["key"]]["fingerprint"]:
             reason = "conflicting_version"
             conflicts.add(e["key"])
         cleaning.append(dict(key=e["key"], title=e["title"], original_url=item.get("sourceUrl") or item.get("url"), normalized_url=e["url"], reason=reason))
         # Keep independent source identities for dependency diff; reposts are excluded from association only.
-        e["duplicate_of"] = seen_content.get(e["fingerprint"])
+        e["duplicate_of"] = seen_content.get(group)
         if e["key"] not in current:
             current[e["key"]] = e
-            seen_content.setdefault(e["fingerprint"], e["key"])
-    previous = (parent or {}).get("signal_evidence", {})
+            seen_content.setdefault(group, e["key"])
+    previous = dict((parent or {}).get('signal_evidence', {}))
+    previous.update((parent or {}).get('evidence', {}))
     added = sorted(current.keys() - previous.keys())
     changed = sorted(k for k in current.keys() & previous.keys() if current[k]["fingerprint"] != previous[k]["fingerprint"])
     changed = sorted(set(changed) | (conflicts & previous.keys()))
     missing = sorted(previous.keys() - current.keys())
     issues = deepcopy((parent or {}).get("issues") or {})
-    specs = questions or ([dict(id=q['id'], axis=q['axis'], question=q['question'], task_type=q.get('task_type', task_type)) for q in issues.values()] if issues else
+    specs = questions or ([dict(id=q['id'], axis=q['axis'], question=q['question'], task_type=q.get('task_type', task_type), critical=q.get('critical', False)) for q in issues.values()] if issues else
         [dict(id=digest([focus, task_type, axis])[:16], axis=axis, question=f"{focus}：{label}？", task_type=task_type) for axis, label in AXES[task_type]])
     changed_questions = set()
     seen_questions = set()
@@ -150,6 +217,9 @@ def build_state(focus, task_type, signals, parent=None, time_scope="", associati
         elif any(issues[issue_id].get(k) != spec.get(k) for k in ('axis', 'question', 'task_type')):
             issues[issue_id].update(axis=axis, question=label, task_type=spec['task_type'])
             changed_questions.add(issue_id)
+    for spec in specs:
+        qid = spec.get("id") or next(k for k,q in issues.items() if q["question"] == spec["question"] and q["axis"] == spec["axis"])
+        issues[qid]["critical"] = bool(spec.get("critical", False))
     corrections = {item["evidence_key"]: item for item in (manual_associations or [])}
     if any(key not in current for key in corrections):
         raise ValueError("人工关联来源必须存在于当前快照")
@@ -158,26 +228,61 @@ def build_state(focus, task_type, signals, parent=None, time_scope="", associati
             raise ValueError("人工关联的对象或问题不属于当前任务")
     associations = []
     for e in current.values():
-        score = similarity(focus, e["title"] + " " + e["content"])
         content = e["title"] + " " + e["content"]
-        matched_terms = sorted(tokens(focus) & tokens(content))
-        if association_mode == "semantic":
-            score = float(semantic_scores.get(e["key"], 0))
-            if not math.isfinite(score) or not -1 <= score <= 1:
-                raise ValueError("invalid semantic similarity")
-        threshold = 0.35 if association_mode == "semantic" else 0.04
-        focused = score >= threshold or (association_mode != "semantic" and focus.lower() in content.lower())
-        dimensions = {k: [w for w in AXIS_WORDS[q["axis"]] if w in content.lower()] for k, q in issues.items()}
-        matched_ids = [k for k in issues if not e.get("duplicate_of") and (association_mode == "unfiltered" or
-                       (bool(matched_terms) if association_mode == "keyword" else focused and bool(dimensions[k])))]
+        object_text, normalized_content = normalize_aliases(focus, content, assoc_cfg)
+        matched_terms = sorted(tokens(object_text) & tokens(normalized_content))
+        lexical = similarity(object_text, normalized_content)
+        cosine = float((semantic_scores or {}).get(e["key"], -1))
+        if not math.isfinite(cosine) or not -1 <= cosine <= 1:
+            raise ValueError("invalid semantic similarity")
+        semantic = (cosine + 1) / 2
+        lam = assoc_cfg['fusion_lambda']
+        score = semantic if association_mode == 'semantic' else lam * lexical + (1-lam) * semantic if association_mode == 'hybrid' else lexical
+        threshold = assoc_cfg['semantic_threshold'] if association_mode == 'semantic' else assoc_cfg['hybrid_object_threshold'] if association_mode == 'hybrid' else assoc_cfg['object_threshold']
+        lexical_candidate = bool(matched_terms) and lexical >= assoc_cfg['object_threshold']
+        semantic_candidate = assoc_cfg['semantic_recall'] and semantic >= assoc_cfg['semantic_threshold']
+        candidate = lexical_candidate or semantic_candidate
+        known_names = set(assoc_cfg['aliases'])
+        known_names.update(word for word in re.findall(r'[a-zA-Z][a-zA-Z0-9_.-]*', object_text)
+                           if word.lower() not in GENERIC_OBJECT_TERMS and not re.fullmatch(r'v\d+(?:\.\d+)*',word,re.I))
+        if re.fullmatch(r'[a-zA-Z][a-zA-Z0-9_.-]*', object_text.strip()):
+            known_names.add(object_text.strip())
+        def names_in(text):
+            return {name for name in known_names if re.search(r'(?<![a-zA-Z0-9])'+re.escape(name)+r'(?![a-zA-Z0-9])',text,re.I)}
+        expected_names, observed_names = names_in(object_text), names_in(normalized_content)
+        entity_ok = not expected_names or not observed_names or bool(expected_names & observed_names)
+        if expected_names and not (expected_names & observed_names) and not observed_names:
+            entity_ok = association_mode in ('semantic','hybrid') and semantic >= assoc_cfg['semantic_threshold']
+        focused = (bool(matched_terms) if association_mode == 'keyword' else score >= threshold)
+        if association_mode == 'hybrid':
+            focused = candidate and focused
+        version_pattern = r'(?<![a-z0-9])(?:v\d+(?:\.\d+)*|\d+\.\d+(?:\.\d+)?)(?![a-z0-9])'
+        expected = assoc_cfg['expected_versions'] or re.findall(version_pattern, focus.lower())
+        observed = {v.lstrip('v') for v in re.findall(version_pattern, content.lower())}
+        version_ok = not assoc_cfg['constrain_versions'] or not expected or bool(observed & {v.lower().lstrip('v') for v in expected})
+        dimensions = {k: [w for w in AXIS_WORDS[q["axis"]] if w in normalized_content.lower()] for k,q in issues.items()}
+        dimension_lexical = {k: len(dimensions[k]) / len(AXIS_WORDS[q["axis"]]) for k,q in issues.items()}
+        dimension_semantic = {}
+        if association_mode in ('semantic', 'hybrid'):
+            by_axis = (semantic_scores or {}).get('__dimensions__', {}).get(e['key'], {})
+            for key,q in issues.items():
+                value = by_axis.get(q['axis'])
+                if type(value) not in (int,float) or not math.isfinite(value) or not -1 <= value <= 1:
+                    raise ValueError('语义关联缺少对应维度的有效向量分数，不能用关键词代替')
+                dimension_semantic[key] = (value+1)/2
+        dimension_scores = {k: dimension_semantic[k] if association_mode == 'semantic' else
+            lam*dimension_lexical[k]+(1-lam)*dimension_semantic[k] if association_mode == 'hybrid' else dimension_lexical[k] for k in issues}
+        dimension_threshold = assoc_cfg['semantic_dimension_threshold'] if association_mode == 'semantic' else assoc_cfg['hybrid_dimension_threshold'] if association_mode == 'hybrid' else assoc_cfg['dimension_threshold']
+        matched_ids = [k for k in issues if not e.get("duplicate_of") and
+                       (association_mode == "unfiltered" or version_ok and entity_ok and focused and dimension_scores[k] >= dimension_threshold)]
         correction = corrections.get(e["key"])
         if correction:
             if e.get("duplicate_of") and correction["question_ids"]:
                 raise ValueError("重复转载不能作为独立证据，请校正原始来源")
             matched_ids = correction["question_ids"]
         associations.append(dict(key=e["key"], title=e["title"], fingerprint=e["fingerprint"], duplicate_of=e.get("duplicate_of"),
-             score=score, threshold=threshold, matched_terms=matched_terms, dimension_hits=dimensions,
-             question_ids=matched_ids, manual=correction, reason="manual_correction" if correction else "duplicate_content" if e.get("duplicate_of") else "matched" if matched_ids else "low_similarity" if not focused else "dimension_unmatched"))
+             score=score, threshold=threshold, lexical_score=lexical, semantic_score=semantic if association_mode in ("semantic", "hybrid") else None, version_compatible=version_ok, entity_compatible=entity_ok, lexical_candidate=lexical_candidate, semantic_candidate=semantic_candidate, candidate_union=candidate, dimension_scores=dimension_scores, dimension_lexical_scores=dimension_lexical, dimension_semantic_scores=dimension_semantic, dimension_threshold=dimension_threshold, matched_terms=matched_terms, dimension_hits=dimensions,
+             question_ids=matched_ids, manual=correction, reason="manual_correction" if correction else "duplicate_content" if e.get("duplicate_of") else 'unfiltered_diagnostic' if association_mode == 'unfiltered' else 'object_mismatch' if not entity_ok else 'version_unconfirmed' if not version_ok and not observed else 'version_mismatch' if not version_ok else "matched" if matched_ids else "low_similarity" if not focused else "dimension_unmatched"))
     affected = set()
     reasons = {}
     for key, issue in issues.items():
@@ -220,12 +325,12 @@ def build_state(focus, task_type, signals, parent=None, time_scope="", associati
         issue["task_type"] = normalize_type(issue.get("task_type") or task_type)
     state = dict(schema_version="issue-state-v1", focus=focus, task_type=task_type,
                  contract_version='proposal-v2-20261015',
-                 association_mode=association_mode, scheduler_config=config,
+                 association_mode=association_mode, association_config=assoc_cfg, scheduler_config=config,
                  time_scope=time_scope, signal_evidence=current,
                  evidence=deepcopy((parent or {}).get("evidence") or {}), issues=issues,
                  evidence_versions=snapshot_versions,
                  delta=dict(added=added, changed=changed, stable=sorted(current.keys() & previous.keys() - set(changed)), absent_from_snapshot=missing),
-                 association=dict(cleaning=cleaning, matches=associations, conflicting_versions=sorted(conflicts), unmatched=[a for a in associations if not a["question_ids"]], raw_count=len(signals), unique_count=len(current)),
+                 association=dict(cleaning=cleaning, matches=associations, embedding_consumption=deepcopy((semantic_scores or {}).get('__usage__', {})), conflicting_versions=sorted(conflicts), unmatched=[a for a in associations if not a["question_ids"]], raw_count=len(signals), unique_count=len(current)),
                  affected=sorted(affected), impact_reasons=reasons, actions=[],
                  parent_digest=digest(parent) if parent else None)
     state["evidence"].update(current)
@@ -234,7 +339,7 @@ def build_state(focus, task_type, signals, parent=None, time_scope="", associati
 
 
 def action_options(state, mode="adaptive", config=None):
-    if mode not in ("adaptive", "fixed", "full", "single"):
+    if mode not in ("adaptive", "fixed", "full", "single", "greedy"):
         raise ValueError("invalid scheduler mode")
     if mode == "full":
         # Preview and execution must use the same target states and utilities.
@@ -255,9 +360,11 @@ def action_options(state, mode="adaptive", config=None):
     targets = sorted(state["issues"]) if mode == "full" else state["affected"]
     for key in sorted(state["issues"]):
         issue = state["issues"][key]
-        independent = {state['evidence'][k]['fingerprint'] for k in issue.get('evidence_keys', []) if state['evidence'].get(k, {}).get('content')}
-        coverage = min(1, len(independent) / 3)
-        novelty = bool(set(issue.get("signal_keys", [])) & set(state["delta"]["added"] + state["delta"]["changed"]))
+        kind = issue.get('task_type', state['task_type'])
+        keys = set(issue.get('evidence_keys', []) + issue.get('signal_keys', []))
+        independent = {state['evidence'][k].get('content_group', state['evidence'][k]['fingerprint']) for k in keys if k in state['signal_evidence'] and state['evidence'].get(k, {}).get('content') and state['evidence'][k].get('retrieval_level') in ('full_text', 'frozen_source') and state['evidence'][k].get('link_available') is not False and not state['evidence'][k].get('duplicate_of')}
+        coverage = min(1, len(independent) / (1 if kind == 'fact_check' else 2))
+        novelty = bool((set(issue.get("signal_keys", [])) | set(issue.get("evidence_keys", []))) & set(state["delta"]["added"] + state["delta"]["changed"] + state["delta"].get("absent_from_snapshot", [])))
         uncertainty = not issue.get("claims") or issue.get("status") == "pending"
         contributions = dict(w0=cfg['w0'], n=0 if 'drop_n' in ablations else cfg['wn'] * int(novelty),
                              u=0 if 'drop_u' in ablations else cfg['wu'] * int(uncertainty),
@@ -267,12 +374,16 @@ def action_options(state, mode="adaptive", config=None):
         utility_priority = 1 if equal else priority
         kind = issue.get('task_type', state['task_type'])
         risk_bonus = 0 if equal or 'drop_t' in ablations else cfg['beta_risk'] * int(kind == 'risk_assessment')
+        beta = cfg['beta_verify'] + risk_bonus if cfg['utility_profile'] == 'legacy_v2' else cfg[{'fact_check':'beta_fact','object_comparison':'beta_comparison','dynamic_analysis':'beta_dynamic','risk_assessment':'beta_risk_v3'}[kind]]
+        if equal or 'drop_t' in ablations: beta = 2
         issue["features"] = dict(t=kind, n=int(novelty), u=int(uncertainty), c=coverage, priority=priority, contributions=contributions)
         if key not in targets:
             continue
         # Each research/review action = one retrieval batch + one model generation.
         result[key] = [dict(issue_id=key, kind="defer", cost=0, utility=0), dict(issue_id=key, kind="research", cost=1, utility=utility_priority * cfg['alpha']),
-                       dict(issue_id=key, kind="research_and_verify", cost=2, utility=utility_priority * cfg['alpha'] + cfg['beta_verify'] + risk_bonus)]
+                       dict(issue_id=key, kind="research_and_verify", cost=2, utility=utility_priority * cfg['alpha'] + beta)]
+        if issue.get('critical') and kind in ('object_comparison', 'risk_assessment') and mode != 'single':
+            result[key] = [o for o in result[key] if o['kind'] != 'research']
     if mode == "single":
         result = {k: [o for o in v if o["kind"] != "research_and_verify"] for k, v in result.items()}
     return result
@@ -289,11 +400,13 @@ def allocate(options, budget):
     if not isinstance(options, dict) or any(not isinstance(k, str) for k in options):
         raise ValueError("options must map string question ids to candidate arrays")
     dp = {0: 0}
+    tie_codes = {0: 0}
     traces = []
-    for key in options:
+    for key in sorted(options):
         if not isinstance(options[key], list):
             raise ValueError("candidate packages must be an array")
         nxt = dict(dp)
+        next_codes = {spent: tie_codes[spent] * 3 for spent in dp}
         trace = {spent: (spent, None) for spent in dp}
         for option in options[key]:
             if not isinstance(option, dict) or type(option.get("cost")) is not int or type(option.get("utility")) not in (int, float) or not math.isfinite(option['utility']):
@@ -305,10 +418,14 @@ def allocate(options, budget):
             for spent, score in dp.items():
                 cost = spent + option["cost"]
                 value = score + option["utility"]
-                if cost <= budget and (cost not in nxt or value > nxt[cost]):
+                rank = 2 if option.get('kind') == 'research_and_verify' else 1
+                code = tie_codes[spent] * 3 + rank
+                if cost <= budget and (cost not in nxt or value > nxt[cost] or value == nxt[cost] and code > next_codes[cost]):
                     nxt[cost] = value
+                    next_codes[cost] = code
                     trace[cost] = (spent, dict(option, issue_id=key))
         dp = nxt
+        tie_codes = next_codes
         traces.append(trace)
     cost = max(dp, key=lambda c: (dp[c], -c))
     selected = []
@@ -395,6 +512,9 @@ def apply_review(state, issue_id, result):
         # old stored record bypassed apply_research. A model cannot waive this.
         citation_errors = [k for k in claim['evidence_keys'] if not state['evidence'].get(k, {}).get('content')]
         errors = list(claim.get('contract_errors') or []) + domain_errors(claim, issue.get('task_type', state['task_type']), state['evidence'])
+        unavailable = {row['key'] for row in state.get('source_refresh', []) if row['outcome'] == 'unavailable'}
+        if unavailable.intersection(claim['evidence_keys']):
+            errors.append('历史引用本次刷新失败，尚未重新取得有效正文')
         if citation_errors or not claim['evidence_keys']:
             errors.append('来源键未通过实际资料集校验')
         claim['contract_errors'] = sorted(set(errors))

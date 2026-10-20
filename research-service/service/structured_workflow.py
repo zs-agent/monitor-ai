@@ -6,10 +6,13 @@ import json
 import time
 from typing import TypedDict
 from langgraph.graph import StateGraph, START, END
-from .research_state import action_options, allocate, apply_research, apply_review, evidence_record, render_report, refresh_dependencies, digest
+from .research_state import action_options, allocate, apply_research, apply_review, evidence_record, render_report, refresh_dependencies, digest, schedule, build_state
 from .contracts import DOMAIN_CONTRACT, SchedulerConfig
 from .search_gateway import NoEvidenceFound, RetrievalUnavailable
 from .search_queries import normalize_query
+
+MODEL_PAYLOAD_FIELDS = frozenset({'question','question_id','axis','task_type','time_scope',
+    'previous_claims','evidence','domain_contract','cited_originals','citation_validation'})
 
 class WorkflowState(TypedDict, total=False):
     research_state: dict
@@ -77,14 +80,16 @@ class ResearchAdapter:
             try:
                 self.metrics['pages_requested'] += 1
                 page = await fetch_source(record['url'])
+                self.metrics['pages_requested'] += max(0, page.get('request_count',1)-1)
                 parsed = evidence_record(page)
                 acquired_fingerprint = evidence_record(dict(record, raw_content=page.get('raw_content') or parsed['content']))['fingerprint']
-                record.update(content=parsed['content'], fingerprint=acquired_fingerprint, fetched_at=time.time(), retrieval_level='full_text', link_available=True,
-                              final_url=page.get('final_url', record['url']))
+                record.update(content=parsed['content'], content_group=parsed['content_group'], fingerprint=acquired_fingerprint, fetched_at=time.time(), retrieval_level='full_text', link_available=True,
+                              final_url=page.get('final_url', record['url']), etag=page.get('etag'), last_modified=page.get('last_modified'))
                 self._acquired_sources[record['key']] = deepcopy(record)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
+                self.metrics['pages_requested'] += max(0, getattr(exc,'request_count',1)-1)
                 code = getattr(exc, 'code', 'source_network_error')
                 failed_source_codes.append(code)
                 self.metrics.setdefault('source_rejections', []).append(dict(host=urlsplit(record['url']).hostname, reason=code))
@@ -110,6 +115,10 @@ class ResearchAdapter:
         from gpt_researcher.utils.llm import get_llm
         from langchain_core.utils.json import parse_json_markdown
         cfg = Config()
+        payload = {key:deepcopy(value) for key,value in payload.items() if key in MODEL_PAYLOAD_FIELDS}
+        for field in ('evidence','cited_originals'):
+            for record in payload.get(field, []):
+                record['content'] = record.get('content','')[:12000]
         schema = ('{"claims":[{"text":"...","kind":"fact_statement|comparison_judgment|trend_inference","evidence_keys":["来源键"],"conditions":"版本与适用条件","comparison":{"dimension":"比较维度","conditions":"共同测试条件","comparable":true,"mismatch_reason":""},"versions":{"before":"版本号","after":"版本号","before_time":"ISO时间","after_time":"ISO时间"},"counter_evidence":[{"text":"反例或反例检索结果与范围","evidence_keys":[]}],"uncertainty":"具体不确定性"}]}' if role == 'research' else
                   '{"checks":[{"index":0,"verdict":"supported|contradicted|insufficient","reason":"..."}]}')
         provider = get_llm(cfg.smart_llm_provider, model=cfg.smart_llm_model,
@@ -120,6 +129,7 @@ class ResearchAdapter:
                     dict(role='user', content=json.dumps(payload, ensure_ascii=False))]
         self.last_model = cfg.smart_llm_model
         self.last_provider = cfg.smart_llm_provider
+        self.last_prompt_hash = digest(messages[0]['content'])
         self.metrics['model_calls'] += 1
         try:
             output = await provider.get_chat_response(messages, False, None)
@@ -150,10 +160,17 @@ async def run_structured(task, bus, adapter=None):
         known = all(a.get('usage_available', False) for a in actions if a.get('model_calls'))
         consumption = dict(model_calls=sum(a.get('model_calls', 0) for a in actions),
             search_batches=sum(a.get('search_batches', 0) for a in actions),
-            retriever_calls=sum(a.get('retriever_calls', 0) for a in actions), pages_requested=sum(a.get('pages_requested', 0) for a in actions),
+            retriever_calls=sum(a.get('retriever_calls', 0) for a in actions), pages_requested=sum(a.get('pages_requested', 0) for a in actions) + sum(c.get('requests', 0) for c in graph.get('source_refresh', [])),
             input_tokens=sum(a.get('input_tokens') or 0 for a in actions) if known else None,
             output_tokens=sum(a.get('output_tokens') or 0 for a in actions) if known else None,
-            elapsed_sec=round(time.monotonic()-started, 3), usage_available=known)
+            elapsed_sec=round(time.monotonic()-started, 3), usage_available=known,
+            source_refresh_requests=sum(c.get('requests',0) for c in graph.get('source_refresh', [])),
+            source_refresh_elapsed_sec=sum(c.get('elapsed_sec',0) for c in graph.get('source_refresh', [])))
+        embeddings = graph.get('embedding_history') or [graph.get('association',{}).get('embedding_consumption',{})]
+        embeddings = [item for item in embeddings if item.get('calls')]
+        consumption['embedding'] = dict(calls=sum(item['calls'] for item in embeddings),
+            input_tokens=sum(item.get('input_tokens') or 0 for item in embeddings) if all(item.get('input_tokens') is not None for item in embeddings) else None,
+            elapsed_sec=sum(item.get('elapsed_sec',0) for item in embeddings), models=sorted({item.get('model','') for item in embeddings}))
         graph['consumption'] = consumption
         graph['remaining_budget'] = max(0, task['action_budget'] - graph.get('allocation', {}).get('spent_units', 0))
         return dict(questions=graph['issues'], evidence=graph['evidence'], conclusions=graph.get('dependency_graph', {}).get('C', {}),
@@ -174,10 +191,40 @@ async def run_structured(task, bus, adapter=None):
     async def plan(state):
         graph['current_role'] = 'planner'
         graph['run_status'] = 'running'
-        options = action_options(graph, mode, cfg)
-        allocation = allocate(options, task['action_budget'])
+        parent = task.get('parent_state_for_refresh')
+        if parent and task.get('data_mode', 'live') == 'live':
+            from .source_refresh import refresh_cited_sources
+            checks = []
+            graph['source_refresh'] = checks
+            emit('structured_refresh', '检查历史引用来源；刷新失败的资料保留待核查')
+            shared()
+            publish_state()
+            try:
+                rows, checks = await refresh_cited_sources(parent, list(graph['signal_evidence'].values()), checks=checks)
+            finally:
+                shared()
+            scores = None
+            if graph.get('association_mode') in ('semantic', 'hybrid'):
+                from .semantic import semantic_scores
+                scores = await semantic_scores(graph['focus'], rows, graph.get('association_config'))
+            refreshed = build_state(graph['focus'], graph['task_type'], rows, parent, graph.get('time_scope', ''),
+                graph.get('association_mode', 'structured'), cfg,
+                [dict(id=q['id'], axis=q['axis'], question=q['question'], task_type=q['task_type'], critical=q.get('critical',False)) for q in graph['issues'].values()],
+                manual_associations=[a['manual'] for a in graph.get('association',{}).get('matches',[]) if a.get('manual') and a['key'] in {evidence_record(r)['key'] for r in rows}],
+                semantic_scores=scores, association_config=graph.get('association_config'))
+            refreshed['evaluation_labels'] = deepcopy(graph.get('evaluation_labels', {}))
+            refreshed['embedding_history'] = (graph.get('embedding_history') or [graph.get('association',{}).get('embedding_consumption',{})]) + [refreshed.get('association',{}).get('embedding_consumption',{})]
+            graph.clear()
+            graph.update(refreshed, source_refresh=checks)
+            task['structured_state'] = graph
+        else:
+            graph['source_refresh_policy'] = 'frozen_input_stability_only' if task.get('data_mode', 'live') != 'live' else 'no_parent'
+        graph['current_role'] = 'planner'
+        graph['run_status'] = 'running'
+        allocation = schedule(graph, mode, task['action_budget'], cfg)
         allocation.update(strategy=mode, spent_units=0)
         graph['allocation'] = allocation
+        task.setdefault('research_policy', {}).update(allocation=deepcopy(allocation), affected=graph['affected'], delta=graph['delta'])
         graph['actions'] = []
         graph['plan'] = dict(objects=[graph['focus']], time_scope=graph.get('time_scope') or '未限定',
             task_types=sorted({q.get('task_type', graph['task_type']) for q in graph['issues'].values()}),
@@ -185,11 +232,21 @@ async def run_structured(task, bus, adapter=None):
             subtasks=[dict(question_id=a['issue_id'], action=a['kind']) for a in allocation['selected']])
         graph['experiment'] = dict(strategy=mode, snapshot_digest=digest({k:e['fingerprint'] for k,e in graph['signal_evidence'].items()}), parent_digest=graph['parent_digest'],
                                    action_budget=task['action_budget'], scheduler_config=cfg, model=task.get('model'), task_type=graph['task_type'], time_scope=graph['time_scope'], association_mode=graph.get('association_mode','structured'), started_at=time.time(), data_mode=task.get('data_mode', 'live'))
+        graph['experiment'].update(config_hash=digest(cfg), model_hash=digest(task.get('model')),
+            prompt_hash=digest({'domain': DOMAIN_CONTRACT, 'generation_limit':1800, 'protocol':'structured-v3'}),
+            question_hash=digest({k:{f:q.get(f) for f in ('question','task_type','critical')} for k,q in graph['issues'].items()}),
+            reserve_units=allocation['reserve_units'], initial_budget=allocation['initial_budget'])
+        graph['experiment']['state_features_constant'] = {field:len({q.get('features',{}).get(field) for q in graph['issues'].values()})<=1 for field in ('n','u','c')}
+        effective_config = dict(cfg, reserve_ratio=None, reserve_units=allocation['reserve_units'])
+        effective_config['ablations'] = [a for a in cfg['ablations'] if a != 'drop_reserve']
+        graph['experiment']['effective_config_hash'] = digest(effective_config)
         allocation['defer_reasons'] = {key: '剩余预算不足或其他问题代理效用更高' for key in allocation['deferred']}
         pending = []
         for item in allocation['selected']:
             pending.append(dict(issue_id=item['issue_id'], kind='research'))
             if item['kind'] == 'research_and_verify': pending.append(dict(issue_id=item['issue_id'], kind='review'))
+        if not pending and mode != 'single':
+            pending = feedback_actions(0)
         emit('structured_plan', json.dumps(allocation, ensure_ascii=False))
         values = shared()
         publish_state()
@@ -200,7 +257,13 @@ async def run_structured(task, bus, adapter=None):
         issue = graph['issues'][action['issue_id']]
         if role == 'review' and (not issue['claims'] or issue.get('last_research_failed')):
             graph['actions'].append(dict(**action, unit_cost=0, outcome='skipped_no_new_claims'))
-            return dict(pending=pending, spent=state['spent'])
+            if not pending and mode != 'single': pending = feedback_actions(state['spent'])
+            values = shared()
+            publish_state()
+            return dict(research_state=graph, pending=pending, spent=state['spent'], **values)
+        if role == 'research':
+            for claim in issue['claims']:
+                claim.update(status='pending_verification', verification_status='pending_verification', update_status='pending')
         spent = state['spent'] + 1
         if spent > task['action_budget']: raise RuntimeError('action budget exceeded')
         event = dict(**action, unit_cost=1, outcome='started', search_batches=0, model_calls=0)
@@ -224,7 +287,10 @@ async def run_structured(task, bus, adapter=None):
                     source_keys = dict.fromkeys(issue.get('signal_keys', []) + issue['evidence_keys'])
                     sources = [graph['evidence'][key] for key in source_keys if key in graph['evidence'] and not graph['evidence'][key].get('duplicate_of')][:4]
                     event['associated_sources'] = [s['key'] for s in sources]
-                    if hasattr(adapter, 'search_with_sources'):
+                    if action.get('existing_only'):
+                        evidence = [graph['evidence'][k] for k in issue['evidence_keys'] if k in graph['evidence'] and graph['evidence'][k].get('content')]
+                        event['search_batches'] = 0
+                    elif hasattr(adapter, 'search_with_sources'):
                         evidence = await adapter.search_with_sources(search_query, sources)
                     else:
                         evidence = await adapter.search(search_query)
@@ -234,6 +300,10 @@ async def run_structured(task, bus, adapter=None):
                     evidence = []  # Review can still check the acquired originals.
                 if not isinstance(evidence, list): raise ValueError('evidence must be an array')
                 evidence = [e for e in evidence[:8] if isinstance(e, dict) and e.get('key') and e.get('content')]
+                acquired_keys = {e['key'] for e in evidence if e.get('retrieval_level') in ('full_text','frozen_source')}
+                for check in graph.get('source_refresh', []):
+                    if check['key'] in acquired_keys and check['outcome'] == 'unavailable':
+                        check['outcome'] = 'recovered_during_action'
                 if role == 'review':
                     fetched = {e['key']: e for e in evidence}
                     for key in issue['evidence_keys']:
@@ -242,7 +312,7 @@ async def run_structured(task, bus, adapter=None):
                 if not evidence: raise NoEvidenceFound('检索未找到与该问题匹配的资料，暂不能判断；可核对名称或补充来源')
                 payload = dict(question=issue['question'], question_id=issue['id'], axis=issue['axis'],
                     task_type=issue.get('task_type', graph['task_type']), time_scope=graph.get('time_scope'),
-                    previous_claims=issue['claims'][:12], evidence=evidence, domain_contract=DOMAIN_CONTRACT[issue.get('task_type', graph['task_type'])])
+                    previous_claims=[{k:v for k,v in c.items() if k not in ('review','status','verification_status','previous_status','update_status')} for c in issue['claims'][:12]], evidence=evidence, domain_contract=DOMAIN_CONTRACT[issue.get('task_type', graph['task_type'])])
                 if role == 'review':
                     originals = {}
                     for c in issue['claims']:
@@ -299,6 +369,7 @@ async def run_structured(task, bus, adapter=None):
                     event[field] = metrics[field] - before_metrics.get(field, 0)
             event['model'] = getattr(adapter, 'last_model', None)
             event['provider'] = getattr(adapter, 'last_provider', None)
+            event['prompt_hash'] = getattr(adapter, 'last_prompt_hash', None) if event.get('model_calls') else None
             event['usage_available'] = bool(metrics.get('usage_available', False))
             for field in ('input_tokens', 'output_tokens'):
                 event[field] = metrics.get(field, 0) - before_metrics.get(field, 0) if event['usage_available'] else None
@@ -310,18 +381,43 @@ async def run_structured(task, bus, adapter=None):
             values = shared()
             emit('structured_progress', json.dumps(dict(spent_units=spent, issue_id=action['issue_id'], outcome=event['outcome']), ensure_ascii=False))
             publish_state()
-        if role == 'review' and issue['status'] == 'unresolved':
-            round_number = issue.get('feedback_rounds', 0)
-            available = task['action_budget'] - spent - len(pending)
-            if available > 0 and round_number < cfg['max_feedback_rounds']:
-                # Reserve all originally selected actions before spending slack.
-                # A review-only feedback step is useful even with just one unit.
-                extra = [dict(issue_id=issue['id'], kind='research'), dict(issue_id=issue['id'], kind='review')] if available >= 2 else [dict(issue_id=issue['id'], kind='review')]
-                issue['feedback_rounds'] = round_number + 1
-                for item in extra: item['feedback'] = True
-                pending = extra + pending
-                emit('structured_feedback', json.dumps(dict(issue_id=issue['id'], remaining=task['action_budget']-spent, reserved=len(pending), actions=extra), ensure_ascii=False))
+        if not pending and mode != 'single':
+            pending = feedback_actions(spent)
         return dict(research_state=graph, pending=pending, spent=spent, **values)
+
+    def feedback_actions(spent):
+        available = task['action_budget'] - spent
+        pending = []
+        decisions = graph.setdefault('feedback_decisions', [])
+        candidates = [q for q in graph['issues'].values() if q['id'] in graph['affected']
+                      and q['status'] not in ('reviewed', 'carried')
+                      and q.get('feedback_rounds', 0) < cfg['max_feedback_rounds']]
+        def ordering(q):
+            contradiction = any(c.get('verification_status') == 'contradicted' for c in q['claims'])
+            return (-int(contradiction), -int(q.get('critical', False)), -q.get('features', {}).get('priority', 0), q['id'])
+        for q in sorted(candidates, key=ordering):
+            # An initial research-only draft can be reviewed from acquired originals.
+            # Contradiction, insufficiency, bad references or failed research need new evidence.
+            usable = bool(q['claims']) and bool(q['evidence_keys']) and not q.get('last_research_failed')
+            gap = not usable or any(c.get('verification_status') in ('contradicted', 'insufficient') or c.get('contract_errors') for c in q['claims'])
+            required = 2 if gap else 1
+            decision = dict(issue_id=q['id'], required_cost=required, available=available,
+                            reason='evidence_gap' if gap else 'unreviewed_draft')
+            if available < required:
+                decision.update(action='pending', reason=decision['reason'] + '_budget_insufficient')
+                q['pending_reason'] = '剩余次数不足以补齐所需研究和核查，保留待核查。'
+                decisions.append(decision)
+                continue
+            q['feedback_rounds'] = q.get('feedback_rounds', 0) + 1
+            extra = ([dict(issue_id=q['id'], kind='research', feedback=True)] if gap else [])
+            extra.append(dict(issue_id=q['id'], kind='review', feedback=True, existing_only=not gap))
+            pending.extend(extra)
+            available -= required
+            decision['action'] = 'research_and_verify' if gap else 'review_existing'
+            decisions.append(decision)
+        if pending:
+            emit('structured_feedback', json.dumps(dict(actions=pending, available_after_reservation=available), ensure_ascii=False))
+        return pending
 
     async def research(state): return await execute(state, 'research')
     async def verify(state): return await execute(state, 'review')
@@ -341,6 +437,9 @@ async def run_structured(task, bus, adapter=None):
         values = shared()
         graph['experiment'].update(elapsed_sec=round(time.monotonic() - started, 3), spent_units=state['spent'],
                                   search_batches=sum(a.get('search_batches', 0) for a in graph['actions']), model_calls=sum(a.get('model_calls', 0) for a in graph['actions']))
+        graph['experiment']['actual_models'] = sorted({str(a['model']) for a in graph['actions'] if a.get('model')})
+        graph['experiment']['actual_model_hash'] = digest(graph['experiment']['actual_models'])
+        graph['experiment']['actual_prompt_hashes'] = sorted({a['prompt_hash'] for a in graph['actions'] if a.get('prompt_hash')})
         emit('structured_integrate', '整合问题、结论、证据及核查状态')
         from .evaluation import evaluate
         graph['evaluation'] = evaluate(graph)

@@ -13,6 +13,6 @@ export const RunStatusValues = ["running", "done", "partial", "failed", "cancell
 export type RunStatus = typeof RunStatusValues[number]
 export const QuestionStatusValues = ["pending", "draft", "reviewed", "carried", "unresolved"] as const
 export type QuestionStatus = typeof QuestionStatusValues[number]
-export type Ablation = "drop_n" | "drop_u" | "drop_c" | "drop_t" | "equal_utility"
-export interface SchedulerConfig { alpha: number; beta_verify: number; beta_risk: number; w0: number; wn: number; wu: number; wc: number; max_feedback_rounds: number; ablations: Ablation[] }
-export const defaultSchedulerConfig: SchedulerConfig = {"alpha": 4, "beta_verify": 2, "beta_risk": 1, "w0": 1, "wn": 1, "wu": 1, "wc": 1, "ablations": [], "max_feedback_rounds": 1}
+export type Ablation = "drop_n" | "drop_u" | "drop_c" | "drop_t" | "drop_reserve" | "equal_utility"
+export interface SchedulerConfig { alpha: number; beta_verify: number; beta_risk: number; w0: number; wn: number; wu: number; wc: number; max_feedback_rounds: number; utility_profile: "legacy_v2" | "proposal_v3"; beta_fact: number; beta_comparison: number; beta_dynamic: number; beta_risk_v3: number; reserve_units: number; reserve_ratio: number | null; ablations: Ablation[] }
+export const defaultSchedulerConfig: SchedulerConfig = {"alpha": 4, "beta_verify": 2, "beta_risk": 1, "utility_profile": "proposal_v3", "beta_fact": 2, "beta_comparison": 4, "beta_dynamic": 4, "beta_risk_v3": 8, "reserve_units": 1, "reserve_ratio": null, "w0": 1, "wn": 1, "wu": 1, "wc": 1, "ablations": [], "max_feedback_rounds": 2}

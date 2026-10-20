@@ -62,7 +62,7 @@ def test_first_research_action_receives_newly_associated_sources():
         async def generate(self, role, payload):
             return dict(claims=[dict(text="Atlas has 32 layers.", conditions="v1", evidence_keys=[row["url"]])])
     asyncio.run(run_structured(dict(structured_state=state, action_budget=1,
-                                   structured_task_id="981", query="Atlas"), EventBus(), Adapter()))
+                                   structured_task_id="981", query="Atlas", scheduler_config=dict(reserve_units=0)), EventBus(), Adapter()))
     assert seen[0] == [row["url"]]
 
 

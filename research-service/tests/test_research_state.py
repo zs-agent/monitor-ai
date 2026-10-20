@@ -98,7 +98,7 @@ class FakeAdapter:
 
 
 def task(state,budget=4):
-    return dict(structured_state=state,action_budget=budget,structured_task_id=123,query='Atlas',scheduler_mode='adaptive')
+    return dict(structured_state=state,action_budget=budget,structured_task_id=123,query='Atlas',scheduler_mode='adaptive',scheduler_config=dict(reserve_units=0))
 
 
 def test_owned_graph_bounds_actions_and_persists_units():

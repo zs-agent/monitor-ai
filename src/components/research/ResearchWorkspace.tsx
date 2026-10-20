@@ -78,16 +78,16 @@ export default function ResearchWorkspace() {
   const [includeUnsuccessful, setIncludeUnsuccessful] = useState(false)
   const engine = 'structured' as const
   const [taskType, setTaskType] = useState<TaskType>('fact_check')
-  const [associationMode, setAssociationMode] = useState<'structured' | 'unfiltered' | 'keyword' | 'semantic'>('structured')
+  const [associationMode, setAssociationMode] = useState<'structured' | 'jaccard' | 'hybrid' | 'unfiltered' | 'keyword' | 'semantic'>('structured')
   const [schedulerConfig, setSchedulerConfig] = useState<SchedulerConfig>({ ...defaultSchedulerConfig, ablations: [] })
   const [manualAssociations, setManualAssociations] = useState<ManualAssociation[]>([])
   const [snapshotOverride, setSnapshotOverride] = useState<Evidence[] | undefined>()
-  const [questionSpecs, setQuestionSpecs] = useState<{ id?: string; axis: string; question: string; task_type: TaskType }[] | undefined>()
+  const [questionSpecs, setQuestionSpecs] = useState<{ id?: string; axis: string; question: string; task_type: TaskType; critical?: boolean }[] | undefined>()
   const [demoResults, setDemoResults] = useState<RunDetail[]>([])
   const [loadingDemo, setLoadingDemo] = useState(false)
   const previewRequestRef = useRef(0)
   const [actionBudget, setActionBudget] = useState(6)
-  const [policyMode, setPolicyMode] = useState<'adaptive' | 'fixed' | 'single' | 'full'>('adaptive')
+  const [policyMode, setPolicyMode] = useState<'adaptive' | 'fixed' | 'single' | 'full' | 'greedy'>('adaptive')
 
   const [previewState, setPreviewState] = useState<ResearchState | null>(null)
   const [timeScope, setTimeScope] = useState('')
@@ -220,6 +220,21 @@ export default function ResearchWorkspace() {
 
   useEffect(() => { previewRequestRef.current++; setPreviewState(null) }, [focus, top, taskType, actionBudget, policyMode, timeScope, reuseHistory, associationMode, schedulerConfig])
 
+  const changeCritical = useCallback(async (id: string, critical: boolean) => {
+    const source = previewState || detail?.structured_state
+    if (!source) return
+    const request = ++previewRequestRef.current
+    const generation = generationRef.current
+    const specs = Object.values(source.issues).map(q => ({ id: q.id, axis: q.axis, question: q.question, task_type: q.task_type || source.task_type, critical: q.id === id ? critical : q.critical || false }))
+    const records = Object.values(source.signal_evidence || source.evidence)
+    const response = await fetch('/api/research/preview', { method: 'POST', headers: { 'content-type': 'application/json' }, signal: AbortSignal.timeout(15000),
+      body: JSON.stringify({ focus, task_type: taskType, action_budget: actionBudget, scheduler_mode: policyMode, association_mode: associationMode, scheduler_config: schedulerConfig, time_scope: timeScope, snapshot: records, questions: specs, manual_associations: manualAssociations, association_config: source.association_config, data_mode: source.data_mode || 'live' }) })
+    const data = await response.json()
+    if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : '修改失败')
+    if (request !== previewRequestRef.current || generation !== generationRef.current) return
+    setQuestionSpecs(specs); setSnapshotOverride(records); setPreviewState(data.structured_state)
+  }, [previewState, detail, focus, taskType, actionBudget, policyMode, associationMode, schedulerConfig, timeScope, manualAssociations])
+
   const correctAssociation = useCallback(async (correction: ManualAssociation) => {
     const sourceState = previewState || detail?.structured_state
     if (!sourceState) return
@@ -227,8 +242,8 @@ export default function ResearchWorkspace() {
     const generation = generationRef.current
     const records = Object.values(sourceState.signal_evidence || sourceState.evidence)
     const corrected = [...manualAssociations.filter(m => m.evidence_key !== correction.evidence_key), correction]
-    const specs = Object.values(sourceState.issues).map(q => ({ id: q.id, axis: q.axis, question: q.question, task_type: q.task_type || sourceState.task_type }))
-    const response = await fetch('/api/research/preview', { method: 'POST', headers: { 'content-type': 'application/json' }, signal: AbortSignal.timeout(15000), body: JSON.stringify({ focus, task_type: taskType, action_budget: actionBudget, scheduler_mode: policyMode, association_mode: associationMode, scheduler_config: schedulerConfig, time_scope: timeScope, snapshot: records, manual_associations: corrected, questions: specs, data_mode: sourceState.data_mode || 'live' }) })
+    const specs = Object.values(sourceState.issues).map(q => ({ id: q.id, axis: q.axis, question: q.question, critical: q.critical || false, task_type: q.task_type || sourceState.task_type }))
+    const response = await fetch('/api/research/preview', { method: 'POST', headers: { 'content-type': 'application/json' }, signal: AbortSignal.timeout(15000), body: JSON.stringify({ focus, task_type: taskType, action_budget: actionBudget, scheduler_mode: policyMode, association_mode: associationMode, scheduler_config: schedulerConfig, time_scope: timeScope, snapshot: records, manual_associations: corrected, questions: specs, association_config: sourceState.association_config, data_mode: sourceState.data_mode || 'live' }) })
     const data = await response.json()
     if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : `HTTP ${response.status}`)
     if (request !== previewRequestRef.current || generation !== generationRef.current) return
@@ -269,7 +284,7 @@ export default function ResearchWorkspace() {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         signal: AbortSignal.timeout(15000),
-        body: JSON.stringify({ focus, top, max_sections: maxSections, policy_mode: policyMode === 'fixed' ? 'fixed' : 'adaptive', parent_task_id: parentTaskId, engine, task_type: taskType, action_budget: actionBudget, scheduler_mode: policyMode, association_mode: associationMode, time_scope: timeScope, scheduler_config: schedulerConfig, manual_associations: manualAssociations, snapshot: snapshotOverride, questions: questionSpecs, data_mode: snapshotOverride ? (previewState || detail?.structured_state)?.data_mode || 'live' : 'live' }),
+        body: JSON.stringify({ focus, top, max_sections: maxSections, policy_mode: policyMode === 'fixed' ? 'fixed' : 'adaptive', parent_task_id: parentTaskId, engine, task_type: taskType, action_budget: actionBudget, scheduler_mode: policyMode, association_mode: associationMode, time_scope: timeScope, scheduler_config: schedulerConfig, manual_associations: manualAssociations, snapshot: snapshotOverride, questions: questionSpecs, association_config: snapshotOverride ? (previewState || detail?.structured_state)?.association_config : undefined, data_mode: snapshotOverride ? (previewState || detail?.structured_state)?.data_mode || 'live' : 'live' }),
       })
       const data = await res.json()
       if (generation !== generationRef.current) return
@@ -437,10 +452,10 @@ export default function ResearchWorkspace() {
                   <label className="block">资料时间范围<input aria-label="资料时间范围" value={timeScope} disabled={running || starting} onChange={e => setTimeScope(e.target.value)} maxLength={200} placeholder="不填则不限定" className="block w-full bg-elevated border border-edge rounded p-2 mt-1" /></label>
                   <label className="block">最多选取资料数<input aria-label="信号条数" type="number" min={1} max={50} value={top} disabled={running || starting} onChange={e => setTop(Math.max(1, Math.min(50, Math.floor(Number(e.target.value) || 1))))} className="block w-full bg-elevated border border-edge rounded p-2 mt-1" /></label>
                   <label className="block">分析方式<select aria-label="研究配置" value={policyMode} disabled={running || starting} onChange={e => setPolicyMode(e.target.value as typeof policyMode)} className="block w-full bg-elevated border border-edge rounded p-2 mt-1">
-                    <option value="adaptive">自动安排（推荐）</option><option value="single">只做研究（对照）</option><option value="full">全部重新研究（对照）</option><option value="fixed">各问题同等优先（对照）</option>
+                    <option value="adaptive">自动安排（推荐）</option><option value="single">只做研究（对照）</option><option value="full">全部重新研究（对照）</option><option value="greedy">按优先程度依次安排</option><option value="fixed">各问题同等优先（对照）</option>
                   </select></label>
                   <label className="block">资料筛选方式<select aria-label="线索关联策略" value={associationMode} disabled={running || starting} onChange={e => setAssociationMode(e.target.value as typeof associationMode)} className="block w-full bg-elevated border border-edge rounded p-2 mt-1">
-                    <option value="structured">词项与分析维度（推荐）</option><option value="keyword">只按关键词（对照）</option><option value="semantic">按语义关联（需配置服务）</option><option value="unfiltered">不做关联筛选（对照）</option>
+                    <option value="structured">词项与分析维度（推荐）</option><option value="keyword">只按关键词（对照）</option><option value="semantic">按语义关联（需配置服务）</option><option value="hybrid">综合关联（需语义服务）</option><option value="unfiltered">不做关联筛选（对照）</option>
                   </select></label>
                   <label className="flex gap-2"><input type="checkbox" checked={reuseHistory} disabled={running || starting} onChange={e => setReuseHistory(e.target.checked)} />接着当前报告继续研究</label>
                   {reuseHistory && !detail?.structured_state && <p>请先在报告库选择一份已有报告。</p>}
@@ -472,7 +487,7 @@ export default function ResearchWorkspace() {
           {detail?.structured_state && ['done', 'partial', 'failed'].includes(detail.status) && <ConclusionSummary key={detail.task_id} state={detail.structured_state} />}
           {(previewState || detail?.structured_state) && <details open={running || !!previewState || !report} className="mx-3 my-2 rounded border border-edge">
             <summary className="cursor-pointer px-3 py-2 text-[12px] text-muted">{zh ? '研究过程与完整证据记录' : 'Research process and evidence records'}</summary>
-            <MechanismView state={(previewState || detail?.structured_state)!} preview={!!previewState} taskId={!previewState && detail?.task_id && ['done', 'partial'].includes(detail.status) ? String(detail.task_id) : undefined} onCorrect={!running ? correctAssociation : undefined} comparisons={demoResults.flatMap((r, i) => r.structured_state ? [{ label: `T${i + 1} · 合成样例`, state: r.structured_state }] : [])} />
+            <MechanismView state={(previewState || detail?.structured_state)!} preview={!!previewState} taskId={!previewState && detail?.task_id && ['done', 'partial'].includes(detail.status) ? String(detail.task_id) : undefined} onCorrect={!running ? correctAssociation : undefined} onCritical={!running && !starting ? changeCritical : undefined} comparisons={demoResults.flatMap((r, i) => r.structured_state ? [{ label: `T${i + 1} · 合成样例`, state: r.structured_state }] : [])} />
           </details>}
           <ReportView
             locale={locale}
